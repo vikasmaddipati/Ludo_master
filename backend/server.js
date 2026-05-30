@@ -9,6 +9,7 @@ const authRoutes = require('./routes/authRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const rewardRoutes = require('./routes/rewardRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
+const friendRoutes = require('./routes/friendRoutes');
 const { initSocket } = require('./sockets/gameSocket');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/rewards', rewardRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/friends', friendRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

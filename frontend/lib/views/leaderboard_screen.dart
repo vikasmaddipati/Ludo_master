@@ -21,9 +21,38 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator(color: AppColors.secondary))
-        : Padding(
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.secondary));
+    }
+
+    if (_leaderboard.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.emoji_events_outlined, size: 80, color: AppColors.textSecondary),
+              const SizedBox(height: 16),
+              const Text(
+                'No Winners Yet!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Be the first player to win a match and claim the top of the leaderboard! 🏆',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final showPodium = _leaderboard.length >= 3;
+
+    return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,7 +86,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: AppColors.secondary.withOpacity(0.15),
+                                color: AppColors.secondary.withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(Icons.stars, color: AppColors.secondary, size: 24),
@@ -87,6 +116,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     ),
                   ),
 
+                // Stunning 3D Podium for Top 3 Players
+                if (showPodium) _buildPodium(),
+
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
                   child: Row(
@@ -105,11 +137,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 // Leaderboard List
                 Expanded(
                   child: ListView.builder(
-                    itemCount: _leaderboard.length,
+                    itemCount: showPodium 
+                        ? (_leaderboard.length > 3 ? _leaderboard.length - 3 : 0) 
+                        : _leaderboard.length,
                     physics: const BouncingScrollPhysics(),
                     itemBuilder: (context, index) {
-                      final player = _leaderboard[index];
-                      final rank = index + 1;
+                      final actualIndex = showPodium ? index + 3 : index;
+                      final player = _leaderboard[actualIndex];
+                      final rank = actualIndex + 1;
                       
                       Widget rankWidget;
                       Color itemBgColor = AppColors.surface;
@@ -147,7 +182,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           border: borderSide != BorderSide.none ? Border.fromBorderSide(borderSide) : null,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
+                              color: Colors.black.withValues(alpha: 0.15),
                               blurRadius: 6,
                               offset: const Offset(0, 3),
                             ),
@@ -188,7 +223,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                   const SizedBox(height: 2),
                                   Text(
                                     '${player['wins'] * 200} pts',
-                                    style: TextStyle(color: AppColors.textSecondary.withOpacity(0.8), fontSize: 11),
+                                    style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.8), fontSize: 11),
                                   ),
                                 ],
                               ),
@@ -198,7 +233,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0F0B26).withOpacity(0.5),
+                                color: const Color(0xFF0F0B26).withValues(alpha: 0.5),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -223,6 +258,120 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           );
   }
 
+  Widget _buildPodium() {
+    final first = _leaderboard[0];
+    final second = _leaderboard[1];
+    final third = _leaderboard.length >= 3 ? _leaderboard[2] : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.surfaceLight, width: 1.5),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 2nd Place
+          _buildPodiumSpot(second, 2, 55, Colors.grey.shade400, '🥈'),
+          
+          // 1st Place
+          _buildPodiumSpot(first, 1, 75, Colors.amber, '👑'),
+
+          // 3rd Place
+          if (third != null)
+            _buildPodiumSpot(third, 3, 45, Colors.brown.shade300, '🥉'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPodiumSpot(dynamic player, int rank, double height, Color color, String emblem) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: rank == 1 ? 3 : 2),
+                boxShadow: [
+                  if (rank == 1)
+                    BoxShadow(
+                      color: Colors.amber.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: rank == 1 ? 28 : 22,
+                backgroundImage: player['avatarUrl'] != null && player['avatarUrl'].isNotEmpty
+                    ? NetworkImage(player['avatarUrl'])
+                    : null,
+                child: player['avatarUrl'] == null || player['avatarUrl'].isEmpty
+                    ? Text(
+                        player['name'][0].toUpperCase(),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                      )
+                    : null,
+              ),
+            ),
+            Positioned(
+              top: rank == 1 ? -16 : -12,
+              child: Text(
+                emblem,
+                style: TextStyle(fontSize: rank == 1 ? 22 : 16),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 75,
+          child: Text(
+            player['name'] ?? 'Player',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+          ),
+        ),
+        Text(
+          '${player['wins']} Wins',
+          style: const TextStyle(color: AppColors.secondary, fontSize: 10, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: 65,
+          height: height,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.05)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            border: Border.all(color: color.withValues(alpha: 0.35), width: 1.5),
+          ),
+          child: Center(
+            child: Text(
+              '#$rank',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: rank == 1 ? 20 : 16, color: color),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -238,16 +387,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         _isLoading = false;
       });
     } else if (mounted) {
-      // Gorgeous premium offline fallback dataset
       setState(() {
-        _leaderboard = [
-          {'name': 'DiceCrusher 🔥', 'wins': 142, 'avatarUrl': 'https://api.dicebear.com/7.x/adventurer/png?seed=crusher'},
-          {'name': 'LudoQueen 👑', 'wins': 118, 'avatarUrl': 'https://api.dicebear.com/7.x/adventurer/png?seed=queen'},
-          {'name': 'TokenStriker ⚡', 'wins': 95, 'avatarUrl': 'https://api.dicebear.com/7.x/adventurer/png?seed=striker'},
-          {'name': 'Guest Master', 'wins': 64, 'avatarUrl': 'https://api.dicebear.com/7.x/adventurer/png?seed=guest'},
-          {'name': 'CasualRoller 🎲', 'wins': 41, 'avatarUrl': 'https://api.dicebear.com/7.x/adventurer/png?seed=roller'},
-        ];
-        _userRank = 12;
+        _leaderboard = [];
+        _userRank = null;
         _isLoading = false;
       });
     }

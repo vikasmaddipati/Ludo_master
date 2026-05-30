@@ -1,0 +1,480 @@
+import 'package:flutter/material.dart';
+import '../constants/app_colors.dart';
+import '../models/user_model.dart';
+import '../models/friend_model.dart';
+import '../services/api_service.dart';
+
+class FriendsScreen extends StatefulWidget {
+  final UserModel currentUser;
+
+  const FriendsScreen({super.key, required this.currentUser});
+
+  @override
+  State<FriendsScreen> createState() => _FriendsScreenState();
+}
+
+class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+
+  List<FriendModel> _friends = [];
+  List<FriendRequestModel> _incomingRequests = [];
+  List<UserModel> _searchResults = [];
+
+  bool _isLoadingFriends = false;
+  bool _isLoadingRequests = false;
+  bool _isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadFriends();
+    _loadRequests();
+  }
+
+  Future<void> _loadFriends() async {
+    setState(() => _isLoadingFriends = true);
+    final list = await ApiService.getFriendsList(widget.currentUser.id);
+    if (mounted) {
+      setState(() {
+        _friends = list;
+        _isLoadingFriends = false;
+      });
+    }
+  }
+
+  Future<void> _loadRequests() async {
+    setState(() => _isLoadingRequests = true);
+    final res = await ApiService.getFriendRequests(widget.currentUser.id);
+    if (mounted) {
+      setState(() {
+        _incomingRequests = res['incoming'] ?? [];
+        _isLoadingRequests = false;
+      });
+    }
+  }
+
+  Future<void> _handleSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() => _isSearching = true);
+    final results = await ApiService.searchUsers(query, widget.currentUser.id);
+    if (mounted) {
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    }
+  }
+
+  void _sendFriendRequest(UserModel targetUser) async {
+    final success = await ApiService.sendFriendRequest(widget.currentUser.id, targetUser.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success 
+            ? 'Friend request sent to ${targetUser.name}!' 
+            : 'Failed to send friend request.'
+          ),
+          backgroundColor: success ? AppColors.green : AppColors.red,
+        ),
+      );
+    }
+  }
+
+  void _acceptRequest(FriendRequestModel req) async {
+    final success = await ApiService.acceptFriendRequest(req.id);
+    if (mounted) {
+      if (success) {
+        setState(() {
+          _incomingRequests.removeWhere((element) => element.id == req.id);
+        });
+        _loadFriends();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Accepted friend request from ${req.requester.name}!'), backgroundColor: AppColors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to accept friend request.'), backgroundColor: AppColors.red),
+        );
+      }
+    }
+  }
+
+  void _rejectRequest(FriendRequestModel req) async {
+    final success = await ApiService.rejectFriendRequest(req.id);
+    if (mounted) {
+      if (success) {
+        setState(() {
+          _incomingRequests.removeWhere((element) => element.id == req.id);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Declined friend request from ${req.requester.name}.')),
+        );
+      }
+    }
+  }
+
+  void _unfriend(FriendModel friendship) async {
+    final success = await ApiService.rejectFriendRequest(friendship.id);
+    if (mounted) {
+      if (success) {
+        setState(() {
+          _friends.removeWhere((element) => element.id == friendship.id);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unfriended ${friendship.friend.name}.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Tab bar container
+        Container(
+          color: AppColors.surface,
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: AppColors.secondary,
+            labelColor: AppColors.secondary,
+            unselectedLabelColor: AppColors.textSecondary,
+            tabs: const [
+              Tab(icon: Icon(Icons.people), text: 'Friends'),
+              Tab(icon: Icon(Icons.search), text: 'Search'),
+              Tab(icon: Icon(Icons.mail), text: 'Requests'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildFriendsTab(),
+              _buildSearchTab(),
+              _buildRequestsTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFriendsTab() {
+    if (_isLoadingFriends) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+    }
+
+    if (_friends.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            const Text(
+              'No friends added yet!',
+              style: TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              icon: const Icon(Icons.search, color: AppColors.secondary),
+              label: const Text('Find Players', style: TextStyle(color: AppColors.secondary)),
+              onPressed: () => _tabController.animateTo(1),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadFriends,
+      color: AppColors.primary,
+      backgroundColor: AppColors.surface,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _friends.length,
+        itemBuilder: (context, index) {
+          final f = _friends[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.surfaceLight, width: 1),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundImage: NetworkImage(f.friend.avatarUrl),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: AppColors.green,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.surface, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              title: Text(
+                f.friend.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+              ),
+              subtitle: Text(
+                'Wins: ${f.friend.wins} | Losses: ${f.friend.losses}',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+              trailing: PopupMenuButton<String>(
+                color: AppColors.surfaceLight,
+                icon: const Icon(Icons.more_vert, color: Colors.white),
+                onSelected: (val) {
+                  if (val == 'unfriend') {
+                    _showUnfriendConfirmDialog(f);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'unfriend',
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_remove, color: AppColors.red, size: 18),
+                        SizedBox(width: 8),
+                        Text('Unfriend', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showUnfriendConfirmDialog(FriendModel f) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Unfriend', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Are you sure you want to unfriend ${f.friend.name}?',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            child: const Text('Unfriend', style: TextStyle(color: Colors.white)),
+            onPressed: () {
+              Navigator.pop(context);
+              _unfriend(f);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // Search input field
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Search by player name or email...',
+                    hintStyle: const TextStyle(color: AppColors.textSecondary),
+                    prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                    ),
+                  ),
+                  onSubmitted: (_) => _handleSearch(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                  onPressed: _handleSearch,
+                ),
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _isSearching
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                : _searchResults.isEmpty
+                    ? Center(
+                        child: Text(
+                          _searchController.text.isEmpty
+                              ? 'Enter a name to search for other players'
+                              : 'No players found.',
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final user = _searchResults[index];
+                          // Skip rendering if they are already friended or requested, or simply render
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.surfaceLight, width: 1),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              leading: CircleAvatar(
+                                radius: 24,
+                                backgroundImage: NetworkImage(user.avatarUrl),
+                              ),
+                              title: Text(
+                                user.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              subtitle: Text(
+                                '${user.email}\nWins: ${user.wins}',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                              trailing: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                icon: const Icon(Icons.person_add, size: 16, color: Colors.white),
+                                label: const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                onPressed: () => _sendFriendRequest(user),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestsTab() {
+    if (_isLoadingRequests) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+    }
+
+    if (_incomingRequests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.mail_outline, size: 64, color: AppColors.textSecondary.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            const Text(
+              'No pending friend requests!',
+              style: TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadRequests,
+      color: AppColors.primary,
+      backgroundColor: AppColors.surface,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _incomingRequests.length,
+        itemBuilder: (context, index) {
+          final req = _incomingRequests[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.surfaceLight, width: 1),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: CircleAvatar(
+                radius: 24,
+                backgroundImage: NetworkImage(req.requester.avatarUrl),
+              ),
+              title: Text(
+                req.requester.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              subtitle: Text(
+                'Wins: ${req.requester.wins} | Losses: ${req.requester.losses}',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Accept button
+                  IconButton(
+                    icon: const Icon(Icons.check_circle, color: AppColors.green, size: 28),
+                    onPressed: () => _acceptRequest(req),
+                    tooltip: 'Accept',
+                  ),
+                  // Decline button
+                  IconButton(
+                    icon: const Icon(Icons.cancel, color: AppColors.red, size: 28),
+                    onPressed: () => _rejectRequest(req),
+                    tooltip: 'Decline',
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+}

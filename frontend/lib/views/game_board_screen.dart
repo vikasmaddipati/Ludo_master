@@ -8,6 +8,7 @@ import '../services/livekit_service.dart';
 import '../widgets/ludo_board.dart';
 import '../widgets/dice_widget.dart';
 import '../widgets/chat_dialog.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class GameBoardScreen extends StatefulWidget {
   final GameRoomModel initialRoom;
@@ -28,6 +29,7 @@ class GameBoardScreen extends StatefulWidget {
 class _GameBoardScreenState extends State<GameBoardScreen> {
   late GameRoomModel _room;
   final LiveKitService _liveKit = LiveKitService();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   
   List<int> _validTokens = [];
   final List<ChatMessage> _messages = [];
@@ -37,7 +39,18 @@ class _GameBoardScreenState extends State<GameBoardScreen> {
   Widget build(BuildContext context) {
     final myPlayer = _room.players.firstWhere((p) => p.userId == widget.myUser.id);
     final myColor = myPlayer.color;
-    final isMyTurn = _room.turn == myColor;
+    
+    // In local Pass & Play (mock mode), any human turn counts as "my turn" for interaction on this physical screen!
+    final activeTurnPlayer = _room.players.firstWhere(
+      (p) => p.color == _room.turn,
+      orElse: () => myPlayer,
+    );
+    final isMyTurn = widget.socket.isMockMode 
+        ? !activeTurnPlayer.isBot 
+        : _room.turn == myColor;
+    
+    // Dynamically synchronize the room state for offline fallback support
+    widget.socket.syncMockRoom(_room);
 
     return Scaffold(
       appBar: AppBar(
@@ -105,7 +118,7 @@ class _GameBoardScreenState extends State<GameBoardScreen> {
                     ),
                     child: LudoBoard(
                       room: _room,
-                      myColor: myColor,
+                      myColor: widget.socket.isMockMode ? _room.turn : myColor,
                       validTokensToMove: _validTokens,
                       onTokenTap: _handleTokenMovement,
                     ),
@@ -128,12 +141,16 @@ class _GameBoardScreenState extends State<GameBoardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.myUser.name,
+                            widget.socket.isMockMode ? activeTurnPlayer.name : widget.myUser.name,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                           Text(
-                            'Color: ${myColor.toUpperCase()}',
-                            style: TextStyle(color: _getColorValue(myColor), fontWeight: FontWeight.bold, fontSize: 12),
+                            'Color: ${(widget.socket.isMockMode ? _room.turn : myColor).toUpperCase()}',
+                            style: TextStyle(
+                              color: _getColorValue(widget.socket.isMockMode ? _room.turn : myColor),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -198,6 +215,7 @@ class _GameBoardScreenState extends State<GameBoardScreen> {
           _room = updatedRoom;
           _validTokens = validTokens;
         });
+        _playDiceSound();
       }
     });
 
@@ -304,6 +322,15 @@ class _GameBoardScreenState extends State<GameBoardScreen> {
     );
   }
 
+  void _playDiceSound() async {
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.play(AssetSource('sounds/dice_roll.mp3'));
+    } catch (e) {
+      print('Error playing dice sound: $e');
+    }
+  }
+
   Color _getColorValue(String colorKey) {
     if (colorKey == 'red') return AppColors.red;
     if (colorKey == 'green') return AppColors.green;
@@ -315,6 +342,7 @@ class _GameBoardScreenState extends State<GameBoardScreen> {
   void dispose() {
     // Gracefully clean up listeners and connection
     _liveKit.leaveAudioRoom();
+    _audioPlayer.dispose();
     widget.socket.disconnect();
     super.dispose();
   }

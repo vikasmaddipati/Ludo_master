@@ -5,8 +5,8 @@ const getLeaderboard = async (req, res) => {
     const { sortBy } = req.query; // 'wins' or 'coins'
     const sortField = sortBy === 'coins' ? 'coins' : 'wins';
 
-    // Retrieve top 50 players
-    const topPlayers = await User.find()
+    // Retrieve top 50 players with at least 1 win
+    const topPlayers = await User.find({ wins: { $gt: 0 } })
       .sort({ [sortField]: -1 })
       .limit(50)
       .select('name email avatarUrl wins coins');
@@ -16,7 +16,7 @@ const getLeaderboard = async (req, res) => {
     let userRank = null;
 
     if (userId) {
-      const allUsers = await User.find().sort({ [sortField]: -1 }).select('_id');
+      const allUsers = await User.find({ wins: { $gt: 0 } }).sort({ [sortField]: -1 }).select('_id');
       const index = allUsers.findIndex(u => u._id.toString() === userId);
       if (index !== -1) {
         userRank = index + 1;

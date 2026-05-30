@@ -2,17 +2,23 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../models/game_room_model.dart';
 import '../models/user_model.dart';
+import '../models/friend_model.dart';
 import '../services/socket_service.dart';
+import '../services/api_service.dart';
 import 'game_board_screen.dart';
 
 class LobbyScreen extends StatefulWidget {
   final String roomCode;
   final UserModel hostUser;
+  final int playerCount;
+  final int botCount;
 
   const LobbyScreen({
     super.key,
     required this.roomCode,
     required this.hostUser,
+    this.playerCount = 4,
+    this.botCount = 0,
   });
 
   @override
@@ -20,7 +26,7 @@ class LobbyScreen extends StatefulWidget {
 }
 
 class _LobbyScreenState extends State<LobbyScreen> {
-  final SocketService _socket = SocketService();
+  final SocketService _socket = SocketService.instance;
   GameRoomModel? _room;
   String _statusMessage = 'Connecting to room...';
 
@@ -60,15 +66,17 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         elevation: 6,
                         shadowColor: AppColors.primary.withOpacity(0.4),
                       ),
-                      icon: const Icon(Icons.offline_bolt, color: Colors.white),
-                      label: const Text(
-                        'PLAY OFFLINE VS BOTS',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5),
+                      icon: Icon(widget.playerCount > 1 ? Icons.people : Icons.offline_bolt, color: Colors.white),
+                      label: Text(
+                        widget.playerCount > 1 ? 'PLAY LOCAL PASS & PLAY' : 'PLAY OFFLINE VS BOTS',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5),
                       ),
                       onPressed: () {
                         setState(() {
                           _socket.isMockMode = true;
-                          _statusMessage = 'Launching offline sandbox...';
+                          _statusMessage = widget.playerCount > 1 
+                              ? 'Launching offline Pass & Play arena...' 
+                              : 'Launching offline sandbox...';
                         });
                         _connectSocket();
                       },
@@ -121,7 +129,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   // Player list queue
                   Expanded(
                     child: ListView.builder(
-                      itemCount: 4,
+                      itemCount: widget.playerCount,
                       itemBuilder: (context, index) {
                         if (index < _room!.players.length) {
                           final player = _room!.players[index];
@@ -233,7 +241,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   const SizedBox(height: 16),
 
                   // Host Start Match
-                  if (isHost)
+                  if (isHost) ...[
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -250,6 +258,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: AppColors.secondary,
+                        side: const BorderSide(color: AppColors.secondary, width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: const Icon(Icons.share, color: AppColors.secondary),
+                      label: const Text('INVITE FRIENDS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      onPressed: () => _showInviteFriendsDrawer(context),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -268,7 +290,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
     });
 
     // Automatically emit room join parameters
-    _socket.joinRoom(widget.roomCode, widget.hostUser.id, widget.hostUser.name);
+    _socket.joinRoom(widget.roomCode, widget.hostUser.id, widget.hostUser.name, widget.playerCount);
+
+    if (widget.playerCount == 1) {
+      for (int i = 0; i < widget.botCount; i++) {
+        Future.delayed(Duration(milliseconds: 1000 + i * 500), () {
+          _socket.addBot(widget.roomCode);
+        });
+      }
+    }
 
     _socket.onRoomUpdated((updatedRoom) {
       if (mounted) {
@@ -301,6 +331,91 @@ class _LobbyScreenState extends State<LobbyScreen> {
     _socket.onErrorReceived((msg) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     });
+  }
+
+  void _showInviteFriendsDrawer(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return FutureBuilder<List<FriendModel>>(
+          future: ApiService.getFriendsList(widget.hostUser.id),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 250,
+                child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+              );
+            }
+            final friends = snapshot.data ?? [];
+            if (friends.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(24),
+                height: 200,
+                child: const Center(
+                  child: Text('No friends found. Add some friends first!', style: TextStyle(color: AppColors.textSecondary)),
+                ),
+              );
+            }
+
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Invite Friends to Lobby',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final f = friends[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundImage: NetworkImage(f.friend.avatarUrl),
+                          ),
+                          title: Text(f.friend.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          subtitle: Text('Wins: ${f.friend.wins}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                          trailing: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.secondary,
+                              foregroundColor: AppColors.background,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Invite', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              _socket.inviteFriend(
+                                roomCode: widget.roomCode,
+                                fromUserId: widget.hostUser.id,
+                                fromUserName: widget.hostUser.name,
+                                toUserId: f.friend.id,
+                              );
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Invitation sent to ${f.friend.name}!'), backgroundColor: AppColors.green),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override

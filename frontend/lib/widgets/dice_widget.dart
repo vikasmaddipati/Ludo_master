@@ -88,6 +88,14 @@ class _DiceWidgetState extends State<DiceWidget> with SingleTickerProviderStateM
   }
 
   @override
+  void didUpdateWidget(covariant DiceWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) {
+      _animController.forward(from: 0.0);
+    }
+  }
+
+  @override
   void dispose() {
     _animController.dispose();
     super.dispose();

@@ -17,9 +17,31 @@ const START_INDEX = {
 
 const COLOR_ORDER = ['red', 'green', 'yellow', 'blue'];
 
+const activeUserSockets = new Map(); // userId -> socket.id
+
 const initSocket = (io) => {
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
+
+    // Register active user
+    socket.on('register_user', (userId) => {
+      socket.userId = userId;
+      activeUserSockets.set(userId, socket.id);
+      console.log(`User ${userId} registered to socket ${socket.id}`);
+    });
+
+    // Send game invite to a friend
+    socket.on('invite_friend', ({ roomCode, fromUserId, fromUserName, toUserId }) => {
+      const recipientSocketId = activeUserSockets.get(toUserId);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('receive_game_invite', {
+          roomCode,
+          fromUserId,
+          fromUserName
+        });
+        console.log(`Invite forwarded: ${fromUserName} invites ${toUserId} to room ${roomCode}`);
+      }
+    });
 
     // Join Game Room
     socket.on('join_room', async ({ roomCode, userId, name }) => {
@@ -302,6 +324,11 @@ const initSocket = (io) => {
 
     // Handle Network Disconnections
     socket.on('disconnect', async () => {
+      if (socket.userId && activeUserSockets.get(socket.userId) === socket.id) {
+        activeUserSockets.delete(socket.userId);
+        console.log(`User ${socket.userId} removed from active user sockets.`);
+      }
+
       if (socket.roomCode && socket.userId) {
         console.log(`Socket disconnected gracefully: ${socket.userId}`);
         try {

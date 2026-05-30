@@ -5,10 +5,15 @@ import '../models/chat_message.dart';
 
 class SocketService {
   late IO.Socket socket;
-  static const String serverUrl = 'https://ludo-t3um.onrender.com';
+  static const String serverUrl = 'http://192.168.1.13:3000';
+  static final SocketService instance = SocketService();
 
   bool isConnected = false;
   bool isMockMode = false;
+
+  void syncMockRoom(GameRoomModel room) {
+    mockRoom = room;
+  }
 
   // Saved callbacks for mock simulation
   Function(GameRoomModel)? _onRoomUpdated;
@@ -37,7 +42,8 @@ class SocketService {
 
     socket.onConnect((_) {
       isConnected = true;
-      print('Socket.io connected successfully.');
+      socket.emit('register_user', userId);
+      print('Socket.io connected successfully and registered user: $userId');
     });
 
     socket.onDisconnect((_) {
@@ -52,8 +58,24 @@ class SocketService {
   }
 
   // Action emitters
-  void joinRoom(String roomCode, String userId, String name) {
+  void joinRoom(String roomCode, String userId, String name, [int playerCount = 4]) {
     if (isMockMode) {
+      final colors = ['red', 'green', 'yellow', 'blue'];
+      final List<PlayerModel> players = [
+        PlayerModel(userId: userId, name: name, color: 'red', isReady: true, isConnected: true, isBot: false)
+      ];
+
+      for (int i = 1; i < playerCount; i++) {
+        players.add(PlayerModel(
+          userId: 'local_${colors[i]}',
+          name: 'Player ${colors[i].toUpperCase()}',
+          color: colors[i],
+          isReady: true,
+          isConnected: true,
+          isBot: false,
+        ));
+      }
+
       // Build a local sandbox room
       mockRoom = GameRoomModel(
         id: 'room_$roomCode',
@@ -63,9 +85,7 @@ class SocketService {
         turn: 'red',
         diceValue: 1,
         hasRolled: false,
-        players: [
-          PlayerModel(userId: userId, name: name, color: 'red', isReady: true, isConnected: true, isBot: false)
-        ],
+        players: players,
         tokens: []
       );
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -148,7 +168,8 @@ class SocketService {
   }
 
   void rollDice(String roomCode) {
-    if (isMockMode) {
+    if (isMockMode || !isConnected) {
+      isMockMode = true;
       if (mockRoom == null || mockRoom!.status != 'playing' || mockRoom!.hasRolled) return;
       final dice = Random().nextInt(6) + 1;
       mockRoom!.diceValue = dice;
@@ -171,7 +192,8 @@ class SocketService {
   }
 
   void moveToken(String roomCode, int tokenId) {
-    if (isMockMode) {
+    if (isMockMode || !isConnected) {
+      isMockMode = true;
       if (mockRoom == null || mockRoom!.status != 'playing' || !mockRoom!.hasRolled) return;
       final turnColor = mockRoom!.turn;
       final dice = mockRoom!.diceValue;
@@ -390,6 +412,36 @@ class SocketService {
     if (!isMockMode) {
       socket.on('error_message', (data) {
         onErr(data['message'] ?? 'Error occurred');
+      });
+    }
+  }
+
+  void inviteFriend({
+    required String roomCode,
+    required String fromUserId,
+    required String fromUserName,
+    required String toUserId,
+  }) {
+    if (isMockMode) {
+      print('Mock socket: Send room invitation to $toUserId');
+      return;
+    }
+    socket.emit('invite_friend', {
+      'roomCode': roomCode,
+      'fromUserId': fromUserId,
+      'fromUserName': fromUserName,
+      'toUserId': toUserId,
+    });
+  }
+
+  void onReceiveGameInvite(Function(String roomCode, String fromUserId, String fromUserName) onInvite) {
+    if (!isMockMode) {
+      socket.on('receive_game_invite', (data) {
+        onInvite(
+          data['roomCode'] ?? '',
+          data['fromUserId'] ?? '',
+          data['fromUserName'] ?? '',
+        );
       });
     }
   }
