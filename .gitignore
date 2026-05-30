@@ -1,0 +1,28 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_deploy/
+
+# Flutter/Dart build files
+build/
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+backend/.env

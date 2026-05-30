@@ -1,0 +1,38 @@
+name: ludo_master
+description: A complete production-ready multiplayer Ludo mobile app with voice chat.
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Icons
+  cupertino_icons: ^1.0.6
+
+  # Firebase Suite — latest versions (v3+ core, v5+ auth, v15+ messaging)
+  # These versions all require web ^1.1.1, compatible with livekit_client 2.7.x
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.7.0
+  firebase_messaging: ^15.2.10
+  google_sign_in: 6.2.1
+
+  # Real-Time & Voice Networking
+  socket_io_client: ^2.0.3+1
+  livekit_client: ^2.7.0
+
+  # Utilities
+  http: ^1.2.1
+  shared_preferences: ^2.2.2
+  intl: ^0.19.0
+  cloud_firestore: ^5.6.12
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

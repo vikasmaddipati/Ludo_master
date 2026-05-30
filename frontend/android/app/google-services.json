@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "497629835372",
+    "project_id": "ludo-master-1cfac",
+    "storage_bucket": "ludo-master-1cfac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:497629835372:android:63acaa789b067a4ee06849",
+        "android_client_info": {
+          "package_name": "com.ludomaster.app.ludo_master"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "497629835372-dur0imqadkrpisdeaf84bfpatb46s2l6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ludomaster.app.ludo_master",
+            "certificate_hash": "328b02ea37b382668339d180fbfdd4e2157d9d02"
+          }
+        },
+        {
+          "client_id": "497629835372-k9a6ut9j1sg4sqooogp88radnv9m43nn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDiCkz7eCclFT6B9JvypRsT44eC7wTqbl8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "497629835372-k9a6ut9j1sg4sqooogp88radnv9m43nn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "497629835372-n46tkrlpkruqd3n4hcsjp916i2fkejq2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ludomaster.app.ludoMaster"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
