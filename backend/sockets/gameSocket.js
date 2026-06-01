@@ -312,6 +312,27 @@ const initSocket = (io) => {
       }
     });
 
+    // Real-Time Voice Assistant Socket Channels
+    socket.on('voice_command', ({ roomCode, userId, action, text, params }) => {
+      console.log(`[SOCKET VOICE COMMAND] User ${userId} sent command: "${text}" -> intent "${action}"`);
+      io.to(roomCode).emit('voice_execute', {
+        userId,
+        action,
+        text,
+        params,
+        timestamp: new Date()
+      });
+    });
+
+    socket.on('voice_error', ({ roomCode, userId, error }) => {
+      console.error(`[SOCKET VOICE ERROR] User ${userId} execution failed: ${error}`);
+      io.to(roomCode).emit('voice_error_occurred', {
+        userId,
+        error,
+        timestamp: new Date()
+      });
+    });
+
     // Real-Time Chat & Emojis inside room
     socket.on('send_chat_message', ({ roomCode, senderName, message, isEmoji }) => {
       io.to(roomCode).emit('chat_message_received', {

@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'views/login_screen.dart';
 import 'views/home_screen.dart';
+import 'widgets/voice_assistant_wrapper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,9 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
+      },
+      builder: (context, child) {
+        return VoiceAssistantWrapper(child: child!);
       },
     );
   }

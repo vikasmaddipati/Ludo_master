@@ -59,60 +59,63 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               children: [
                 // Top user rank display
                 if (_userRank != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2E245C), Color(0xFF1D1540)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                  Semantics(
+                    label: "Your Ranking is Number $_userRank",
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2E245C), Color(0xFF1D1540)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppColors.secondary.withOpacity(0.3), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.secondary.withOpacity(0.08),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
                       ),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.secondary.withOpacity(0.3), width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.secondary.withOpacity(0.08),
-                          blurRadius: 16,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondary.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.stars, color: AppColors.secondary, size: 24),
                               ),
-                              child: const Icon(Icons.stars, color: AppColors.secondary, size: 24),
-                            ),
-                            const SizedBox(width: 14),
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'YOUR RANKING',
-                                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: AppColors.textSecondary, letterSpacing: 1),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Keep rolling to climb!',
-                                  style: TextStyle(fontSize: 12, color: Colors.white70),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        Text(
-                          '#$_userRank',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28, color: AppColors.secondary),
-                        ),
-                      ],
+                              const SizedBox(width: 14),
+                              const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'YOUR RANKING',
+                                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: AppColors.textSecondary, letterSpacing: 1),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Keep rolling to climb!',
+                                    style: TextStyle(fontSize: 12, color: Colors.white70),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '#$_userRank',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28, color: AppColors.secondary),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -173,23 +176,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         );
                       }
 
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: itemBgColor,
-                          borderRadius: BorderRadius.circular(18),
-                          border: borderSide != BorderSide.none ? Border.fromBorderSide(borderSide) : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
+                      return Semantics(
+                        label: "Rank $rank: ${player['name'] ?? 'Player'}. Points: ${player['wins'] * 200}. Total Wins: ${player['wins']}.",
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: itemBgColor,
+                            borderRadius: BorderRadius.circular(18),
+                            border: borderSide != BorderSide.none ? Border.fromBorderSide(borderSide) : null,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
                             // Rank Badge/Number
                             SizedBox(
                               width: 32,
@@ -249,7 +254,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             ),
                           ],
                         ),
-                      );
+                      ),);
                     },
                   ),
                 ),
@@ -290,9 +295,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _buildPodiumSpot(dynamic player, int rank, double height, Color color, String emblem) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    final winsCount = player['wins'] ?? 0;
+    return Semantics(
+      label: "Podium rank $rank: ${player['name'] ?? 'Player'} with $winsCount Wins.",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
         Stack(
           alignment: Alignment.center,
           clipBehavior: Clip.none,
@@ -369,7 +377,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
         ),
       ],
-    );
+    ),);
   }
 
   @override

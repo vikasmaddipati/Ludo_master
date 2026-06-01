@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../models/game_room_model.dart';
+import '../services/accessibility_service.dart';
 
 class LudoBoard extends StatelessWidget {
   final GameRoomModel room;
@@ -275,42 +276,50 @@ class LudoBoard extends StatelessWidget {
     if (color == 'yellow') tokenColor = AppColors.yellow;
     if (color == 'blue') tokenColor = AppColors.blue;
 
-    return GestureDetector(
-      onTap: () {
-        if (canMove) onTokenTap(tokenId);
-      },
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 1.0, end: canMove ? 1.2 : 1.0),
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.elasticOut,
-        builder: (context, scale, child) {
-          return Transform.scale(
-            scale: scale,
-            child: Container(
-              decoration: BoxDecoration(
-                color: tokenColor,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: tokenColor.withOpacity(canMove ? 0.9 : 0.4),
-                    blurRadius: canMove ? 10 : 4,
-                    spreadRadius: canMove ? 3 : 0,
-                  ),
-                ],
-              ),
-              child: canMove
-                  ? const Center(
-                      child: Icon(
-                        Icons.touch_app,
-                        size: 10,
-                        color: Colors.white,
-                      ),
-                    )
-                  : null,
-            ),
-          );
+    return Semantics(
+      label: "${color.toUpperCase()} goti number ${tokenId + 1}",
+      hint: canMove ? "Tap to move this goti." : "This goti cannot move right now.",
+      button: canMove,
+      child: GestureDetector(
+        onTap: () {
+          if (canMove) {
+            AccessibilityService.instance.speak("${color.toUpperCase()} goti selected.");
+            onTokenTap(tokenId);
+          }
         },
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: canMove ? 1.2 : 1.0),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.elasticOut,
+          builder: (context, scale, child) {
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: tokenColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: tokenColor.withOpacity(canMove ? 0.9 : 0.4),
+                      blurRadius: canMove ? 10 : 4,
+                      spreadRadius: canMove ? 3 : 0,
+                    ),
+                  ],
+                ),
+                child: canMove
+                    ? const Center(
+                        child: Icon(
+                          Icons.touch_app,
+                          size: 10,
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
+              ),
+            );
+          },
+        ),
       ),
     );
   }

@@ -7,6 +7,15 @@ import 'leaderboard_screen.dart';
 import 'profile_screen.dart';
 import 'friends_screen.dart';
 import '../services/socket_service.dart';
+import '../services/audio_service.dart';
+import '../services/voice_assistant_service.dart';
+import 'voice_settings_screen.dart';
+import '../services/global_voice_manager.dart';
+import '../services/voice_command_registry.dart';
+import '../services/accessibility_service.dart';
+import 'settings_screen.dart';
+import '../widgets/accessible_interactive.dart';
+import 'rewards_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +34,123 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initSocketInvitationListener();
+    AudioService.instance.initializeBackgroundMusic();
+    
+    // Safely spin up the Voice Assistant services after user logs in and mounts the Home Dashboard
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await GlobalVoiceManager.instance.initialize();
+        // Announce screen upon landing
+        AccessibilityService.instance.announceScreen("Home");
+      } catch (e) {
+        debugPrint("Voice Assistant initialization failed: $e");
+      }
+    });
+    
+    // Wire background voice assistant actions
+    VoiceAssistantService.instance.addActionListener(_handleVoiceAction);
+    
+    // Register active contexts for tab-level screen awareness
+    _updateActiveScreenContext(_currentIndex);
+    GlobalVoiceManager.instance.registerContextListener("home", _handleVoiceAction);
+    GlobalVoiceManager.instance.registerContextListener("friends", _handleVoiceAction);
+    GlobalVoiceManager.instance.registerContextListener("leaderboard", _handleVoiceAction);
+    GlobalVoiceManager.instance.registerContextListener("profile", _handleVoiceAction);
+
+    // Register Registry handlers
+    final registry = VoiceCommandRegistry.instance;
+    registry.registerHandler("NAVIGATE_PROFILE", (params) async => _handleVoiceAction("NAVIGATE_PROFILE", params));
+    registry.registerHandler("NAVIGATE_LEADERBOARD", (params) async => _handleVoiceAction("NAVIGATE_LEADERBOARD", params));
+    registry.registerHandler("CLAIM_DAILY_REWARD", (params) async => _handleVoiceAction("CLAIM_DAILY_REWARD", params));
+    registry.registerHandler("NAVIGATE_SETTINGS", (params) async => _handleVoiceAction("NAVIGATE_SETTINGS", params));
+    registry.registerHandler("SHOW_FRIENDS", (params) async => _handleVoiceAction("SHOW_FRIENDS", params));
+    registry.registerHandler("CREATE_ROOM", (params) async => _handleVoiceAction("CREATE_ROOM", params));
+    registry.registerHandler("CREATE_ROOM_PRIVATE", (params) async => _handleVoiceAction("CREATE_ROOM_PRIVATE", params));
+    registry.registerHandler("CREATE_ROOM_PUBLIC", (params) async => _handleVoiceAction("CREATE_ROOM_PUBLIC", params));
+    registry.registerHandler("CREATE_ROOM_BOTS", (params) async => _handleVoiceAction("CREATE_ROOM_BOTS", params));
+    registry.registerHandler("SELECT_PLAYERS", (params) async => _handleVoiceAction("SELECT_PLAYERS", params));
+    registry.registerHandler("SELECT_BOTS", (params) async => _handleVoiceAction("SELECT_BOTS", params));
+    registry.registerHandler("JOIN_ROOM", (params) async => _handleVoiceAction("JOIN_ROOM", params));
+    registry.registerHandler("JOIN_ROOM_CODE", (params) async => _handleVoiceAction("JOIN_ROOM_CODE", params));
+    registry.registerHandler("GET_COINS", (params) async => _handleVoiceAction("GET_COINS", params));
+    registry.registerHandler("GET_WINS", (params) async => _handleVoiceAction("GET_WINS", params));
+  }
+
+  void _updateActiveScreenContext(int index) {
+    String contextName = "home";
+    String screenName = "Home";
+    if (index == 1) {
+      contextName = "rewards";
+      screenName = "Rewards Hub";
+    }
+    if (index == 2) {
+      contextName = "friends";
+      screenName = "Friends List";
+    }
+    if (index == 3) {
+      contextName = "leaderboard";
+      screenName = "Leaderboard";
+    }
+    if (index == 4) {
+      contextName = "profile";
+      screenName = "Profile Details";
+    }
+    GlobalVoiceManager.instance.setActiveContext(contextName);
+    AccessibilityService.instance.announceScreen(screenName);
+  }
+
+  void _handleVoiceAction(String action, Map<String, dynamic> params) {
+    if (!mounted) return;
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    if (action == "NAVIGATE" && params['tabIndex'] != null) {
+      setState(() => _currentIndex = params['tabIndex']);
+    } else if (action == "NAVIGATE_PROFILE") {
+      setState(() => _currentIndex = 3);
+    } else if (action == "NAVIGATE_LEADERBOARD" || action == "SHOW_LEADERBOARD") {
+      setState(() => _currentIndex = 2);
+    } else if (action == "SHOW_FRIENDS") {
+      setState(() => _currentIndex = 1);
+    } else if (action == "NAVIGATE_SETTINGS") {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => VoiceSettingsScreen()),
+      );
+    } else if (action == "CLAIM_DAILY_REWARD" || action == "CLAIM_REWARD") {
+      _claimDailyReward();
+    } else if (action == "CREATE_ROOM" || action == "START_MATCH" || action == "START_GAME") {
+      _handleCreateRoom(user, 2, 0);
+    } else if (action == "CREATE_ROOM_PRIVATE") {
+      _handleCreateRoom(user, 2, 0);
+    } else if (action == "CREATE_ROOM_PUBLIC") {
+      _handleCreateRoom(user, 4, 0);
+    } else if (action == "CREATE_ROOM_BOTS") {
+      _handleCreateRoom(user, 1, 3);
+    } else if (action == "SELECT_PLAYERS" && params['count'] != null) {
+      final count = params['count'] as int;
+      if (count == 1) {
+        _showBotCountDialog(user);
+      } else {
+        _handleCreateRoom(user, count, 0);
+      }
+    } else if (action == "SELECT_BOTS" && params['count'] != null) {
+      final count = params['count'] as int;
+      _handleCreateRoom(user, 1, count);
+    } else if (action == "JOIN_ROOM") {
+      _showJoinRoomDialog();
+    } else if (action == "JOIN_ROOM_CODE" && params['roomCode'] != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LobbyScreen(roomCode: params['roomCode'], hostUser: user),
+        ),
+      );
+    } else if (action == "GET_COINS") {
+      VoiceAssistantService.instance.speak("You currently have ${user.coins} golden coins.", context);
+    } else if (action == "GET_WINS") {
+      VoiceAssistantService.instance.speak("You have won ${user.wins} matches so far. Excellent job!", context);
+    }
   }
 
   void _initSocketInvitationListener() {
@@ -93,6 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Tab lists
     final List<Widget> tabs = [
       _buildLobbyTab(user),
+      RewardsScreen(currentUser: user),
       FriendsScreen(currentUser: user),
       LeaderboardScreen(userId: user.id),
       ProfileScreen(user: user),
@@ -151,21 +278,73 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Daily Reward',
             onPressed: _claimDailyReward,
           ),
+          
+          // Accessible Settings Hub Button
+          Semantics(
+            label: "Settings Hub",
+            hint: "Open categories for General, Voice, Audio, and Accessibility Settings.",
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              tooltip: 'Settings Hub',
+              onPressed: () {
+                AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                AccessibilityService.instance.speak("Settings Hub selected");
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                );
+              },
+            ),
+          ),
         ],
       ),
       body: tabs[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.gamepad), label: 'Play'),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Friends'),
-          BottomNavigationBarItem(icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
+          border: Border(
+            top: BorderSide(color: AppColors.primary.withValues(alpha: 0.3), width: 1.5),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          child: BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() => _currentIndex = index);
+              _updateActiveScreenContext(index);
+            },
+            backgroundColor: Colors.transparent,
+            selectedItemColor: AppColors.secondary,
+            unselectedItemColor: AppColors.textSecondary,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+            unselectedLabelStyle: const TextStyle(fontSize: 10),
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.gamepad), label: 'Play'),
+              BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Rewards'),
+              BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Friends'),
+              BottomNavigationBarItem(icon: Icon(Icons.leaderboard), label: 'Leaderboard'),
+              BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -260,9 +439,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 32),
 
             // CREATE PRIVATE LOBBY CARD (Vibrant Purple to Pink Gradient Button)
-            InkWell(
+            AccessibleInkWell(
+              label: "Create game room",
+              hint: "Host a private match vs friends or bots.",
               onTap: () => _showPlayerCountDialog(user),
-              borderRadius: BorderRadius.circular(24),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
                 decoration: BoxDecoration(
@@ -316,9 +496,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
 
             // JOIN ROOM CARD (Elegant Neon Cyan Outlined Button)
-            InkWell(
+            AccessibleInkWell(
+              label: "Join with room code",
+              hint: "Enter a 6-digit lobby code to join a match.",
               onTap: _showJoinRoomDialog,
-              borderRadius: BorderRadius.circular(24),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
                 decoration: BoxDecoration(
@@ -399,6 +580,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showPlayerCountDialog(user) {
+    AccessibilityService.instance.speak("Create game room selected. Select Players Count dialog opened. Choose one, two, three, or four players.", force: true);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -477,6 +659,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showBotCountDialog(user) {
+    AccessibilityService.instance.speak("Select Bot Count dialog opened. Choose one, two, or three bots.", force: true);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -576,33 +759,49 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showJoinRoomDialog() {
+    AccessibilityService.instance.speak("Join with room code selected. Join Room dialog opened. Please enter six-digit room code.", force: true);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('Join Room', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: _roomCodeController,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
-          maxLength: 6,
-          decoration: const InputDecoration(
-            hintText: 'Enter 6-digit room code',
-            hintStyle: TextStyle(color: AppColors.textSecondary),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+        content: Semantics(
+          label: "Enter six-digit room code text field",
+          child: TextField(
+            controller: _roomCodeController,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(color: Colors.white),
+            maxLength: 6,
+            onChanged: (text) {
+              if (text.isNotEmpty) {
+                final lastChar = text.substring(text.length - 1);
+                AccessibilityService.instance.speak(lastChar, force: true);
+              }
+            },
+            decoration: const InputDecoration(
+              hintText: 'Enter 6-digit room code',
+              hintStyle: TextStyle(color: AppColors.textSecondary),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+            ),
           ),
         ),
         actions: [
           TextButton(
             child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              AccessibilityService.instance.triggerHaptic(intensity: 'light');
+              AccessibilityService.instance.speak("Cancel selected", force: true);
+              Navigator.pop(context);
+            },
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             child: const Text('Join', style: TextStyle(color: Colors.white)),
             onPressed: () {
               final code = _roomCodeController.text.trim();
+              AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+              AccessibilityService.instance.speak("Join selected", force: true);
               if (code.length == 6) {
                 Navigator.pop(context);
                 Navigator.push(
@@ -647,6 +846,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    VoiceAssistantService.instance.removeActionListener(_handleVoiceAction);
+    GlobalVoiceManager.instance.unregisterContextListener("home", _handleVoiceAction);
+    GlobalVoiceManager.instance.unregisterContextListener("friends", _handleVoiceAction);
+    GlobalVoiceManager.instance.unregisterContextListener("leaderboard", _handleVoiceAction);
+    GlobalVoiceManager.instance.unregisterContextListener("profile", _handleVoiceAction);
+
+    // Unregister registry handlers
+    final registry = VoiceCommandRegistry.instance;
+    registry.unregisterHandler("NAVIGATE_PROFILE");
+    registry.unregisterHandler("NAVIGATE_LEADERBOARD");
+    registry.unregisterHandler("CLAIM_DAILY_REWARD");
+    registry.unregisterHandler("NAVIGATE_SETTINGS");
+    registry.unregisterHandler("SHOW_FRIENDS");
+    registry.unregisterHandler("CREATE_ROOM");
+    registry.unregisterHandler("CREATE_ROOM_PRIVATE");
+    registry.unregisterHandler("CREATE_ROOM_PUBLIC");
+    registry.unregisterHandler("CREATE_ROOM_BOTS");
+    registry.unregisterHandler("SELECT_PLAYERS");
+    registry.unregisterHandler("SELECT_BOTS");
+    registry.unregisterHandler("JOIN_ROOM");
+    registry.unregisterHandler("JOIN_ROOM_CODE");
+    registry.unregisterHandler("GET_COINS");
+    registry.unregisterHandler("GET_WINS");
+
     _roomCodeController.dispose();
     super.dispose();
   }

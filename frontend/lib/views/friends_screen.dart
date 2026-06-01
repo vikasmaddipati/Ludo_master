@@ -3,6 +3,11 @@ import '../constants/app_colors.dart';
 import '../models/user_model.dart';
 import '../models/friend_model.dart';
 import '../services/api_service.dart';
+import '../services/global_voice_manager.dart';
+import '../services/voice_command_registry.dart';
+import '../services/voice_assistant_service.dart';
+import '../services/accessibility_service.dart';
+import '../widgets/accessible_interactive.dart';
 
 class FriendsScreen extends StatefulWidget {
   final UserModel currentUser;
@@ -31,6 +36,92 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
     _tabController = TabController(length: 3, vsync: this);
     _loadFriends();
     _loadRequests();
+
+    // Register voice handlers for social actions
+    final registry = VoiceCommandRegistry.instance;
+    registry.registerHandler("ADD_FRIEND", (params) async => _handleVoiceAction("ADD_FRIEND", params));
+    registry.registerHandler("ACCEPT_FRIEND", (params) async => _handleVoiceAction("ACCEPT_FRIEND", params));
+    registry.registerHandler("REJECT_FRIEND", (params) async => _handleVoiceAction("REJECT_FRIEND", params));
+    registry.registerHandler("REMOVE_FRIEND", (params) async => _handleVoiceAction("REMOVE_FRIEND", params));
+  }
+
+  void _handleVoiceAction(String action, Map<String, dynamic> params) {
+    if (!mounted) return;
+
+    if (action == "ADD_FRIEND") {
+      // Search by name and send friend request
+      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
+      if (nameQuery.isNotEmpty) {
+        _searchController.text = nameQuery;
+        _handleSearch().then((_) {
+          if (_searchResults.isNotEmpty) {
+            final match = _searchResults.firstWhere(
+              (u) => u.name.toLowerCase().contains(nameQuery),
+              orElse: () => _searchResults.first,
+            );
+            _sendFriendRequest(match);
+            VoiceAssistantService.instance.speak(
+              "Sending friend request to ${match.name}.", context);
+          } else {
+            VoiceAssistantService.instance.speak(
+              "Could not find player named $nameQuery.", context);
+          }
+        });
+      } else {
+        // Navigate to search tab
+        _tabController.animateTo(1);
+        VoiceAssistantService.instance.speak("Opening friend search.", context);
+      }
+    } else if (action == "ACCEPT_FRIEND") {
+      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
+      if (_incomingRequests.isEmpty) {
+        VoiceAssistantService.instance.speak("You have no pending friend requests.", context);
+      } else {
+        final req = nameQuery.isNotEmpty
+            ? _incomingRequests.firstWhere(
+                (r) => r.requester.name.toLowerCase().contains(nameQuery),
+                orElse: () => _incomingRequests.first,
+              )
+            : _incomingRequests.first;
+        _acceptRequest(req);
+        VoiceAssistantService.instance.speak(
+          "Accepting friend request from ${req.requester.name}.", context);
+      }
+    } else if (action == "REJECT_FRIEND") {
+      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
+      if (_incomingRequests.isEmpty) {
+        VoiceAssistantService.instance.speak("You have no pending friend requests.", context);
+      } else {
+        final req = nameQuery.isNotEmpty
+            ? _incomingRequests.firstWhere(
+                (r) => r.requester.name.toLowerCase().contains(nameQuery),
+                orElse: () => _incomingRequests.first,
+              )
+            : _incomingRequests.first;
+        _rejectRequest(req);
+        VoiceAssistantService.instance.speak(
+          "Rejecting friend request from ${req.requester.name}.", context);
+      }
+    } else if (action == "REMOVE_FRIEND") {
+      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
+      if (_friends.isEmpty) {
+        VoiceAssistantService.instance.speak("Your friends list is empty.", context);
+      } else if (nameQuery.isEmpty) {
+        VoiceAssistantService.instance.speak("Please say the name of the friend to remove.", context);
+      } else {
+        try {
+          final match = _friends.firstWhere(
+            (f) => f.friend.name.toLowerCase().contains(nameQuery),
+          );
+          _unfriend(match);
+          VoiceAssistantService.instance.speak(
+            "Removing ${match.friend.name} from your friends list.", context);
+        } catch (e) {
+          VoiceAssistantService.instance.speak(
+            "Could not find $nameQuery in your friends list.", context);
+        }
+      }
+    }
   }
 
   Future<void> _loadFriends() async {
@@ -66,12 +157,22 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         _searchResults = results;
         _isSearching = false;
       });
+      if (results.isEmpty) {
+        AccessibilityService.instance.speak("No players found matching $query.");
+      } else {
+        AccessibilityService.instance.speak("Found ${results.length} players matching $query.");
+      }
     }
   }
 
   void _sendFriendRequest(UserModel targetUser) async {
     final success = await ApiService.sendFriendRequest(widget.currentUser.id, targetUser.id);
     if (mounted) {
+      if (success) {
+        AccessibilityService.instance.speak("Friend request sent to ${targetUser.name}");
+      } else {
+        AccessibilityService.instance.speak("Failed to send friend request.");
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(success 
@@ -92,10 +193,12 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
           _incomingRequests.removeWhere((element) => element.id == req.id);
         });
         _loadFriends();
+        AccessibilityService.instance.speak("Accepted friend request from ${req.requester.name}!");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Accepted friend request from ${req.requester.name}!'), backgroundColor: AppColors.green),
         );
       } else {
+        AccessibilityService.instance.speak("Failed to accept friend request.");
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to accept friend request.'), backgroundColor: AppColors.red),
         );
@@ -110,6 +213,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         setState(() {
           _incomingRequests.removeWhere((element) => element.id == req.id);
         });
+        AccessibilityService.instance.speak("Declined friend request from ${req.requester.name}.");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Declined friend request from ${req.requester.name}.')),
         );
@@ -124,6 +228,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         setState(() {
           _friends.removeWhere((element) => element.id == friendship.id);
         });
+        AccessibilityService.instance.speak("Removed ${friendship.friend.name} from friends list.");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Unfriended ${friendship.friend.name}.')),
         );
@@ -200,64 +305,73 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         itemCount: _friends.length,
         itemBuilder: (context, index) {
           final f = _friends[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceLight, width: 1),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundImage: NetworkImage(f.friend.avatarUrl),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: AppColors.green,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.surface, width: 2),
+          return Semantics(
+            label: "Friend: ${f.friend.name}. Wins: ${f.friend.wins}, Losses: ${f.friend.losses}.",
+            hint: "Double tap to view friend actions.",
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.surfaceLight, width: 1),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundImage: NetworkImage(f.friend.avatarUrl),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: AppColors.green,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.surface, width: 2),
+                        ),
                       ),
                     ),
+                  ],
+                ),
+                title: Text(
+                  f.friend.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                subtitle: Text(
+                  'Wins: ${f.friend.wins} | Losses: ${f.friend.losses}',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                trailing: Semantics(
+                  label: "Friend Actions",
+                  hint: "Open menu to unfriend ${f.friend.name}.",
+                  button: true,
+                  child: PopupMenuButton<String>(
+                    color: AppColors.surfaceLight,
+                    icon: const Icon(Icons.more_vert, color: Colors.white),
+                    onSelected: (val) {
+                      if (val == 'unfriend') {
+                        _showUnfriendConfirmDialog(f);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'unfriend',
+                        child: Row(
+                          children: [
+                            Icon(Icons.person_remove, color: AppColors.red, size: 18),
+                            SizedBox(width: 8),
+                            Text('Unfriend', style: TextStyle(color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              title: Text(
-                f.friend.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-              ),
-              subtitle: Text(
-                'Wins: ${f.friend.wins} | Losses: ${f.friend.losses}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-              trailing: PopupMenuButton<String>(
-                color: AppColors.surfaceLight,
-                icon: const Icon(Icons.more_vert, color: Colors.white),
-                onSelected: (val) {
-                  if (val == 'unfriend') {
-                    _showUnfriendConfirmDialog(f);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'unfriend',
-                    child: Row(
-                      children: [
-                        Icon(Icons.person_remove, color: AppColors.red, size: 18),
-                        SizedBox(width: 8),
-                        Text('Unfriend', style: TextStyle(color: Colors.white)),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           );
@@ -303,38 +417,45 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Search by player name or email...',
-                    hintStyle: const TextStyle(color: AppColors.textSecondary),
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
+                child: Semantics(
+                  label: "Search player by name or email input field",
+                  textField: true,
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Search by player name or email...',
+                      hintStyle: const TextStyle(color: AppColors.textSecondary),
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                      filled: true,
+                      fillColor: AppColors.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                      ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                    ),
+                    onSubmitted: (_) => _handleSearch(),
                   ),
-                  onSubmitted: (_) => _handleSearch(),
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
+              AccessibleInkWell(
+                label: "Search button",
+                hint: "Search user database.",
+                onTap: _handleSearch,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.arrow_forward, color: Colors.white),
                 ),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_forward, color: Colors.white),
-                  onPressed: _handleSearch,
-                ),
-              )
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -354,37 +475,36 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                         itemCount: _searchResults.length,
                         itemBuilder: (context, index) {
                           final user = _searchResults[index];
-                          // Skip rendering if they are already friended or requested, or simply render
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppColors.surfaceLight, width: 1),
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              leading: CircleAvatar(
-                                radius: 24,
-                                backgroundImage: NetworkImage(user.avatarUrl),
+                          return Semantics(
+                            label: "${user.name}. Email: ${user.email}. Wins: ${user.wins}.",
+                            hint: "Double tap to send friend request.",
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppColors.surfaceLight, width: 1),
                               ),
-                              title: Text(
-                                user.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                              ),
-                              subtitle: Text(
-                                '${user.email}\nWins: ${user.wins}',
-                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                              ),
-                              trailing: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: CircleAvatar(
+                                  radius: 24,
+                                  backgroundImage: NetworkImage(user.avatarUrl),
                                 ),
-                                icon: const Icon(Icons.person_add, size: 16, color: Colors.white),
-                                label: const Text('Add', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                onPressed: () => _sendFriendRequest(user),
+                                title: Text(
+                                  user.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                subtitle: Text(
+                                  '${user.email}\nWins: ${user.wins}',
+                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                ),
+                                trailing: AccessibleButton(
+                                  label: 'Add',
+                                  hint: 'Send friend request to ${user.name}',
+                                  onTap: () => _sendFriendRequest(user),
+                                  icon: const Icon(Icons.person_add, size: 16, color: Colors.white),
+                                ),
                               ),
                             ),
                           );
@@ -426,43 +546,56 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         itemCount: _incomingRequests.length,
         itemBuilder: (context, index) {
           final req = _incomingRequests[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceLight, width: 1),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: CircleAvatar(
-                radius: 24,
-                backgroundImage: NetworkImage(req.requester.avatarUrl),
+          return Semantics(
+            label: "Friend request from ${req.requester.name}. Wins: ${req.requester.wins}, Losses: ${req.requester.losses}.",
+            hint: "Use accept or decline buttons on the right.",
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.surfaceLight, width: 1),
               ),
-              title: Text(
-                req.requester.name,
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              subtitle: Text(
-                'Wins: ${req.requester.wins} | Losses: ${req.requester.losses}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Accept button
-                  IconButton(
-                    icon: const Icon(Icons.check_circle, color: AppColors.green, size: 28),
-                    onPressed: () => _acceptRequest(req),
-                    tooltip: 'Accept',
-                  ),
-                  // Decline button
-                  IconButton(
-                    icon: const Icon(Icons.cancel, color: AppColors.red, size: 28),
-                    onPressed: () => _rejectRequest(req),
-                    tooltip: 'Decline',
-                  ),
-                ],
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: CircleAvatar(
+                  radius: 24,
+                  backgroundImage: NetworkImage(req.requester.avatarUrl),
+                ),
+                title: Text(
+                  req.requester.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                subtitle: Text(
+                  'Wins: ${req.requester.wins} | Losses: ${req.requester.losses}',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Accept button
+                    AccessibleInkWell(
+                      label: "Accept",
+                      hint: "Accept friend request from ${req.requester.name}.",
+                      onTap: () => _acceptRequest(req),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4.0),
+                        child: Icon(Icons.check_circle, color: AppColors.green, size: 28),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Decline button
+                    AccessibleInkWell(
+                      label: "Decline",
+                      hint: "Decline friend request from ${req.requester.name}.",
+                      onTap: () => _rejectRequest(req),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4.0),
+                        child: Icon(Icons.cancel, color: AppColors.red, size: 28),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -473,6 +606,13 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
 
   @override
   void dispose() {
+    // Unregister voice handlers
+    final registry = VoiceCommandRegistry.instance;
+    registry.unregisterHandler("ADD_FRIEND");
+    registry.unregisterHandler("ACCEPT_FRIEND");
+    registry.unregisterHandler("REJECT_FRIEND");
+    registry.unregisterHandler("REMOVE_FRIEND");
+
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();

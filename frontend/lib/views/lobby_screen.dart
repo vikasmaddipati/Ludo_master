@@ -6,6 +6,11 @@ import '../models/friend_model.dart';
 import '../services/socket_service.dart';
 import '../services/api_service.dart';
 import 'game_board_screen.dart';
+import '../services/voice_assistant_service.dart';
+import '../services/global_voice_manager.dart';
+import '../services/voice_command_registry.dart';
+import '../services/accessibility_service.dart';
+import 'settings_screen.dart';
 
 class LobbyScreen extends StatefulWidget {
   final String roomCode;
@@ -37,9 +42,37 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Room Lobby: ${widget.roomCode}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('Room Lobby: ${widget.roomCode}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
         backgroundColor: AppColors.surface,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            AccessibilityService.instance.triggerHaptic(intensity: 'light');
+            AccessibilityService.instance.speak("Leaving room lobby");
+            _socket.disconnect();
+            Navigator.pop(context);
+          },
+        ),
+        actions: [
+          Semantics(
+            label: "Settings Hub",
+            hint: "Open categories for General, Voice, Audio, and Accessibility Settings.",
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              tooltip: 'Settings Hub',
+              onPressed: () {
+                AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                AccessibilityService.instance.speak("Settings Hub selected");
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                );
+              },
+            ),
+          ),
+        ],
       ),
       body: _room == null
           ? Center(
@@ -205,34 +238,51 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.only(right: 8),
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                side: const BorderSide(color: AppColors.secondary),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            child: Semantics(
+                              label: "Add Bot",
+                              hint: "Double tap to add a computer bot player to the game lobby.",
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  side: const BorderSide(color: AppColors.secondary),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                ),
+                                icon: const Icon(Icons.android, color: AppColors.secondary),
+                                label: const Text('ADD BOT', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                                  AccessibilityService.instance.speak("Computer bot player added");
+                                  _socket.addBot(_room!.roomCode);
+                                },
                               ),
-                              icon: const Icon(Icons.android, color: AppColors.secondary),
-                              label: const Text('ADD BOT', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold)),
-                              onPressed: () => _socket.addBot(_room!.roomCode),
                             ),
                           ),
                         ),
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.only(left: 8),
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: _room!.players.any((p) => p.userId == user.id && p.isReady)
-                                  ? AppColors.surfaceLight
-                                  : AppColors.secondary,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          child: Semantics(
+                            label: _room!.players.any((p) => p.userId == user.id && p.isReady) ? "Unready" : "Ready",
+                            hint: "Double tap to toggle your readiness state.",
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor: _room!.players.any((p) => p.userId == user.id && p.isReady)
+                                    ? AppColors.surfaceLight
+                                    : AppColors.secondary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              child: Text(
+                                _room!.players.any((p) => p.userId == user.id && p.isReady) ? 'UNREADY' : 'READY',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              onPressed: () {
+                                AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                                final isReady = _room!.players.any((p) => p.userId == user.id && p.isReady);
+                                AccessibilityService.instance.speak(isReady ? "Ready state canceled" : "Ready selected");
+                                _socket.toggleReady(_room!.roomCode, user.id);
+                              },
                             ),
-                            child: Text(
-                              _room!.players.any((p) => p.userId == user.id && p.isReady) ? 'UNREADY' : 'READY',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            onPressed: () => _socket.toggleReady(_room!.roomCode, user.id),
                           ),
                         ),
                       ),
@@ -242,34 +292,50 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
                   // Host Start Match
                   if (isHost) ...[
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        backgroundColor: _room!.players.length >= 2
-                            ? AppColors.primary
-                            : AppColors.surfaceLight,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      onPressed: _room!.players.length >= 2
-                          ? () => _socket.startGame(_room!.roomCode)
-                          : null,
-                      child: const Text(
-                        'START MULTIPLAYER MATCH',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                    Semantics(
+                      label: "Start Match",
+                      hint: "Double tap to start the Ludo multiplayer match now.",
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          backgroundColor: _room!.players.length >= 2
+                              ? AppColors.primary
+                              : AppColors.surfaceLight,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        onPressed: _room!.players.length >= 2
+                            ? () {
+                                AccessibilityService.instance.triggerHaptic(intensity: 'heavy');
+                                AccessibilityService.instance.speak("Starting Ludo Match");
+                                _socket.startGame(_room!.roomCode);
+                              }
+                            : null,
+                        child: const Text(
+                          'START MULTIPLAYER MATCH',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: AppColors.secondary,
-                        side: const BorderSide(color: AppColors.secondary, width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    Semantics(
+                      label: "Invite Friends",
+                      hint: "Double tap to open the slide drawer and invite your friends to this room.",
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: AppColors.secondary,
+                          side: const BorderSide(color: AppColors.secondary, width: 1.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        icon: const Icon(Icons.share, color: AppColors.secondary),
+                        label: const Text('INVITE FRIENDS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        onPressed: () {
+                          AccessibilityService.instance.triggerHaptic(intensity: 'light');
+                          AccessibilityService.instance.speak("Opening invite friends drawer");
+                          _showInviteFriendsDrawer(context);
+                        },
                       ),
-                      icon: const Icon(Icons.share, color: AppColors.secondary),
-                      label: const Text('INVITE FRIENDS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      onPressed: () => _showInviteFriendsDrawer(context),
                     ),
                   ],
                 ],
@@ -282,6 +348,79 @@ class _LobbyScreenState extends State<LobbyScreen> {
   void initState() {
     super.initState();
     _connectSocket();
+    
+    // Announce screen transition upon landing
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AccessibilityService.instance.announceScreen("Room Lobby");
+    });
+    
+    // Wire global background voice assistant commands
+    VoiceAssistantService.instance.addActionListener(_handleVoiceAction);
+    
+    // Register active lobby context for screen awareness
+    GlobalVoiceManager.instance.setActiveContext("lobby");
+    GlobalVoiceManager.instance.registerContextListener("lobby", _handleVoiceAction);
+
+    // Register Registry handlers
+    final registry = VoiceCommandRegistry.instance;
+    registry.registerHandler("START_MATCH", (params) async => _handleVoiceAction("START_MATCH", params));
+    registry.registerHandler("START_GAME", (params) async => _handleVoiceAction("START_GAME", params));
+    registry.registerHandler("LEAVE_ROOM", (params) async => _handleVoiceAction("LEAVE_ROOM", params));
+    registry.registerHandler("ADD_BOT", (params) async => _handleVoiceAction("ADD_BOT", params));
+    registry.registerHandler("TOGGLE_READY", (params) async => _handleVoiceAction("TOGGLE_READY", params));
+    registry.registerHandler("INVITE_FRIEND", (params) async => _handleVoiceAction("INVITE_FRIEND", params));
+  }
+
+  void _handleVoiceAction(String action, Map<String, dynamic> params) {
+    if (!mounted || _room == null) return;
+    final isHost = _room!.creator == widget.hostUser.id;
+
+    if (action == "START_GAME" || action == "START_MATCH") {
+      if (isHost) {
+        if (_room!.players.length >= 2) {
+          _socket.startGame(_room!.roomCode);
+        } else {
+          VoiceAssistantService.instance.speak("You need at least 2 players to start a multiplayer match.", context);
+        }
+      } else {
+        VoiceAssistantService.instance.speak("Only the room host can start the match.", context);
+      }
+    } else if (action == "ADD_BOT") {
+      if (isHost) {
+        if (_room!.players.length < 4) {
+          _socket.addBot(_room!.roomCode);
+        } else {
+          VoiceAssistantService.instance.speak("The lobby is already full!", context);
+        }
+      } else {
+        VoiceAssistantService.instance.speak("Only the room host can add bots.", context);
+      }
+    } else if (action == "TOGGLE_READY") {
+      _socket.toggleReady(_room!.roomCode, widget.hostUser.id);
+    } else if (action == "LEAVE_ROOM") {
+      _socket.disconnect();
+      Navigator.pop(context);
+    } else if (action == "INVITE_FRIEND") {
+      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
+      if (nameQuery.isNotEmpty) {
+        ApiService.getFriendsList(widget.hostUser.id).then((friendsList) {
+          try {
+            final match = friendsList.firstWhere(
+              (f) => f.friend.name.toLowerCase().contains(nameQuery),
+            );
+            _socket.inviteFriend(
+              roomCode: widget.roomCode,
+              fromUserId: widget.hostUser.id,
+              fromUserName: widget.hostUser.name,
+              toUserId: match.friend.id,
+            );
+            VoiceAssistantService.instance.speak("${match.friend.name} has been invited to play!", context);
+          } catch (e) {
+            VoiceAssistantService.instance.speak("Friend $nameQuery was not found in your list.", context);
+          }
+        });
+      }
+    }
   }
 
   void _connectSocket() {
@@ -420,6 +559,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   @override
   void dispose() {
+    VoiceAssistantService.instance.removeActionListener(_handleVoiceAction);
+    GlobalVoiceManager.instance.unregisterContextListener("lobby", _handleVoiceAction);
+    
+    // Unregister registry handlers
+    final registry = VoiceCommandRegistry.instance;
+    registry.unregisterHandler("START_MATCH");
+    registry.unregisterHandler("START_GAME");
+    registry.unregisterHandler("LEAVE_ROOM");
+    registry.unregisterHandler("ADD_BOT");
+    registry.unregisterHandler("TOGGLE_READY");
+    registry.unregisterHandler("INVITE_FRIEND");
+
     // If room hasn't started and we exit, clean up connection
     if (_room == null || _room!.status == 'waiting') {
       _socket.disconnect();

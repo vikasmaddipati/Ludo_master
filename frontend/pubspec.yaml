@@ -12,6 +12,10 @@ dependencies:
   # Icons
   cupertino_icons: ^1.0.6
 
+  # Voice Assistant
+  speech_to_text: ^7.4.0
+  flutter_tts: ^4.2.2
+
   # Firebase Suite — latest versions (v3+ core, v5+ auth, v15+ messaging)
   # These versions all require web ^1.1.1, compatible with livekit_client 2.7.x
   firebase_core: ^3.15.2
@@ -39,3 +43,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/sounds/
+
+dependency_overrides:
+  js: ^0.7.1

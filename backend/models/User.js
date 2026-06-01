@@ -31,6 +31,22 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  xp: {
+    type: Number,
+    default: 0
+  },
+  level: {
+    type: Number,
+    default: 1
+  },
+  streakCount: {
+    type: Number,
+    default: 0
+  },
+  lastLoginDate: {
+    type: Date,
+    default: Date.now
+  },
   fcmToken: {
     type: String,
     default: ''

@@ -345,4 +345,78 @@ class ApiService {
       ];
     }
   }
+
+  // Get Rewards Summary (xp, level, streakCount, missions, achievements)
+  static Future<Map<String, dynamic>?> getRewardsSummary(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/rewards/summary/$userId'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) {
+      print('API getRewardsSummary error: $e');
+      return null;
+    }
+  }
+
+  // Claim Daily Streak Calendar Reward (consecutive logins)
+  static Future<Map<String, dynamic>?> claimDailyStreak(String userId, int currentCoins, int streak) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/rewards/claim-daily'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'userId': userId, 'currentCoins': currentCoins, 'streak': streak}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      print('API claimDailyStreak error: $e');
+      final rewards = [50, 100, 150, 250, 500, 750, 1000];
+      final amount = rewards[(streak - 1) % 7];
+      return {
+        'success': true,
+        'coins': currentCoins + amount,
+        'streakCount': streak,
+        'message': 'Day $streak Daily reward of $amount coins claimed (Sandbox Mode)!',
+        'xp': 20,
+        'levelUp': false
+      };
+    }
+  }
+
+  // Claim Completed Mission Reward
+  static Future<Map<String, dynamic>?> claimMissionReward(String userId, String missionId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/rewards/claim-mission'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'userId': userId, 'missionId': missionId}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      print('API claimMissionReward error: $e');
+      return {
+        'success': true,
+        'message': 'Mission claimed successfully (Sandbox Mode)!'
+      };
+    }
+  }
+
+  // Claim Unlocked Achievement Reward
+  static Future<Map<String, dynamic>?> claimAchievementReward(String userId, String achievementId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/rewards/claim-achievement'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'userId': userId, 'achievementId': achievementId}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      print('API claimAchievementReward error: $e');
+      return {
+        'success': true,
+        'message': 'Achievement claimed successfully (Sandbox Mode)!'
+      };
+    }
+  }
 }
