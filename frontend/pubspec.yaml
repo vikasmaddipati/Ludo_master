@@ -12,8 +12,7 @@ dependencies:
   # Icons
   cupertino_icons: ^1.0.6
 
-  # Voice Assistant
-  speech_to_text: ^7.4.0
+  # Accessibility / Speech
   flutter_tts: ^4.2.2
 
   # Firebase Suite — latest versions (v3+ core, v5+ auth, v15+ messaging)
@@ -33,6 +32,7 @@ dependencies:
   intl: ^0.19.0
   cloud_firestore: ^5.6.12
   audioplayers: ^6.7.0
+  permission_handler: ^12.0.3
 
 dev_dependencies:
   flutter_test:

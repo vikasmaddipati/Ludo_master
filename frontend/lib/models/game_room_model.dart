@@ -1,3 +1,5 @@
+import 'chat_message.dart';
+
 class PlayerModel {
   final String userId;
   final String name;
@@ -58,6 +60,7 @@ class GameRoomModel {
   int diceValue;
   bool hasRolled;
   String? winnerId;
+  List<ChatMessage> messages;
 
   GameRoomModel({
     required this.id,
@@ -70,6 +73,7 @@ class GameRoomModel {
     required this.diceValue,
     required this.hasRolled,
     this.winnerId,
+    required this.messages,
   });
 
   factory GameRoomModel.fromJson(Map<String, dynamic> json) {
@@ -78,6 +82,9 @@ class GameRoomModel {
 
     var tokenList = json['tokens'] as List? ?? [];
     List<LudoTokenModel> tokens = tokenList.map((i) => LudoTokenModel.fromJson(i)).toList();
+
+    var msgList = json['messages'] as List? ?? [];
+    List<ChatMessage> messages = msgList.map((i) => ChatMessage.fromJson(i)).toList();
 
     return GameRoomModel(
       id: json['_id'] ?? '',
@@ -90,6 +97,7 @@ class GameRoomModel {
       diceValue: json['diceValue'] ?? 1,
       hasRolled: json['hasRolled'] ?? false,
       winnerId: json['winnerId'],
+      messages: messages,
     );
   }
 }

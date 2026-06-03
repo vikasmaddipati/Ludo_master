@@ -84,6 +84,17 @@ const getRewardsSummary = async (req, res) => {
     const missions = await Mission.find({ userId });
     const achievements = await Achievement.find({ userId });
 
+    const lastClaim = await RewardHistory.findOne({
+      userId,
+      rewardType: 'daily'
+    }).sort({ date: -1 });
+
+    const now = new Date();
+    const claimedToday = lastClaim && 
+                         lastClaim.date.getFullYear() === now.getFullYear() &&
+                         lastClaim.date.getMonth() === now.getMonth() &&
+                         lastClaim.date.getDate() === now.getDate();
+
     res.status(200).json({
       success: true,
       coins: user.coins,
@@ -91,6 +102,8 @@ const getRewardsSummary = async (req, res) => {
       level: user.level || 1,
       streakCount: user.streakCount || 0,
       xpThreshold: getXpThreshold(user.level || 1),
+      claimedToday: !!claimedToday,
+      lastClaimedDate: lastClaim ? lastClaim.date : null,
       missions,
       achievements
     });
@@ -111,15 +124,13 @@ const claimDailyReward = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       // Elegant Sandbox Guest Daily Claim Response
       const currentCoins = req.body.currentCoins ? parseInt(req.body.currentCoins) : 1000;
-      const streak = req.body.streak ? (parseInt(req.body.streak) % 7) + 1 : 1;
-      const rewards = [50, 100, 150, 250, 500, 750, 1000];
-      const amount = rewards[streak - 1];
+      const amount = 100;
 
       return res.status(200).json({
         success: true,
-        message: `Day ${streak} Daily reward of ${amount} coins claimed successfully (Sandbox Session)!`,
+        message: `Daily reward of ${amount} coins claimed successfully (Sandbox Session)!`,
         coins: currentCoins + amount,
-        streakCount: streak,
+        streakCount: 1,
         xp: 15,
         levelUp: false
       });
@@ -130,45 +141,25 @@ const claimDailyReward = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
-    // Check last daily reward claim
+    // Check if claimed today (calendar-day midnight check)
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
     const lastClaim = await RewardHistory.findOne({
       userId,
-      rewardType: 'daily'
-    }).sort({ date: -1 });
-
-    const now = new Date();
-    let currentStreak = user.streakCount || 0;
+      rewardType: 'daily',
+      date: { $gte: startOfToday }
+    });
 
     if (lastClaim) {
-      const timeDiff = now.getTime() - lastClaim.date.getTime();
-      const hoursDiff = timeDiff / (1000 * 3600);
-
-      if (hoursDiff < 24) {
-        const remainingHours = Math.ceil(24 - hoursDiff);
-        return res.status(400).json({
-          success: false,
-          message: `Daily reward already claimed. Try again in ${remainingHours} hours.`
-        });
-      }
-
-      if (hoursDiff >= 24 && hoursDiff <= 48) {
-        // Continue Streak
-        currentStreak = currentStreak >= 7 ? 1 : currentStreak + 1;
-      } else {
-        // Over 48 hours: Reset Streak
-        currentStreak = 1;
-      }
-    } else {
-      // First Claim ever
-      currentStreak = 1;
+      return res.status(400).json({
+        success: false,
+        message: 'Daily reward already claimed today. Try again tomorrow after midnight!'
+      });
     }
 
-    // Days rewards table
-    const dailyRewards = [50, 100, 150, 250, 500, 750, 1000];
-    const rewardAmount = dailyRewards[currentStreak - 1];
-
+    const rewardAmount = 100; // Flat 100 coins daily reward amount
     user.coins += rewardAmount;
-    user.streakCount = currentStreak;
     user.lastLoginDate = now;
 
     // Grant XP for claiming daily
@@ -195,9 +186,9 @@ const claimDailyReward = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Day ${currentStreak} Daily Reward of ${rewardAmount} coins claimed!`,
+      message: `Daily Reward of ${rewardAmount} coins claimed successfully!`,
       coins: user.coins,
-      streakCount: currentStreak,
+      streakCount: 1,
       xp: user.xp,
       level: user.level,
       levelUp

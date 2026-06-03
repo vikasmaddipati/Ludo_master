@@ -6,9 +6,6 @@ import '../models/friend_model.dart';
 import '../services/socket_service.dart';
 import '../services/api_service.dart';
 import 'game_board_screen.dart';
-import '../services/voice_assistant_service.dart';
-import '../services/global_voice_manager.dart';
-import '../services/voice_command_registry.dart';
 import '../services/accessibility_service.dart';
 import 'settings_screen.dart';
 
@@ -353,75 +350,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AccessibilityService.instance.announceScreen("Room Lobby");
     });
-    
-    // Wire global background voice assistant commands
-    VoiceAssistantService.instance.addActionListener(_handleVoiceAction);
-    
-    // Register active lobby context for screen awareness
-    GlobalVoiceManager.instance.setActiveContext("lobby");
-    GlobalVoiceManager.instance.registerContextListener("lobby", _handleVoiceAction);
-
-    // Register Registry handlers
-    final registry = VoiceCommandRegistry.instance;
-    registry.registerHandler("START_MATCH", (params) async => _handleVoiceAction("START_MATCH", params));
-    registry.registerHandler("START_GAME", (params) async => _handleVoiceAction("START_GAME", params));
-    registry.registerHandler("LEAVE_ROOM", (params) async => _handleVoiceAction("LEAVE_ROOM", params));
-    registry.registerHandler("ADD_BOT", (params) async => _handleVoiceAction("ADD_BOT", params));
-    registry.registerHandler("TOGGLE_READY", (params) async => _handleVoiceAction("TOGGLE_READY", params));
-    registry.registerHandler("INVITE_FRIEND", (params) async => _handleVoiceAction("INVITE_FRIEND", params));
   }
 
-  void _handleVoiceAction(String action, Map<String, dynamic> params) {
-    if (!mounted || _room == null) return;
-    final isHost = _room!.creator == widget.hostUser.id;
-
-    if (action == "START_GAME" || action == "START_MATCH") {
-      if (isHost) {
-        if (_room!.players.length >= 2) {
-          _socket.startGame(_room!.roomCode);
-        } else {
-          VoiceAssistantService.instance.speak("You need at least 2 players to start a multiplayer match.", context);
-        }
-      } else {
-        VoiceAssistantService.instance.speak("Only the room host can start the match.", context);
-      }
-    } else if (action == "ADD_BOT") {
-      if (isHost) {
-        if (_room!.players.length < 4) {
-          _socket.addBot(_room!.roomCode);
-        } else {
-          VoiceAssistantService.instance.speak("The lobby is already full!", context);
-        }
-      } else {
-        VoiceAssistantService.instance.speak("Only the room host can add bots.", context);
-      }
-    } else if (action == "TOGGLE_READY") {
-      _socket.toggleReady(_room!.roomCode, widget.hostUser.id);
-    } else if (action == "LEAVE_ROOM") {
-      _socket.disconnect();
-      Navigator.pop(context);
-    } else if (action == "INVITE_FRIEND") {
-      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
-      if (nameQuery.isNotEmpty) {
-        ApiService.getFriendsList(widget.hostUser.id).then((friendsList) {
-          try {
-            final match = friendsList.firstWhere(
-              (f) => f.friend.name.toLowerCase().contains(nameQuery),
-            );
-            _socket.inviteFriend(
-              roomCode: widget.roomCode,
-              fromUserId: widget.hostUser.id,
-              fromUserName: widget.hostUser.name,
-              toUserId: match.friend.id,
-            );
-            VoiceAssistantService.instance.speak("${match.friend.name} has been invited to play!", context);
-          } catch (e) {
-            VoiceAssistantService.instance.speak("Friend $nameQuery was not found in your list.", context);
-          }
-        });
-      }
-    }
-  }
 
   void _connectSocket() {
     _socket.connect(widget.hostUser.id, (err) {
@@ -449,9 +379,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     _socket.onGameStarted((startedRoom) {
       if (mounted) {
+        setState(() {
+          _room = startedRoom;
+        });
         // Stop current socket listener registrations
-        _socket.socket.off('room_updated');
-        _socket.socket.off('game_started');
+        _socket.off('room_updated');
+        _socket.off('game_started');
+        _socket.off('error_message');
 
         // Route directly to Active Ludo Gameplay Screen!
         Navigator.pushReplacement(
@@ -468,7 +402,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
     });
 
     _socket.onErrorReceived((msg) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
     });
   }
 
@@ -559,20 +495,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   @override
   void dispose() {
-    VoiceAssistantService.instance.removeActionListener(_handleVoiceAction);
-    GlobalVoiceManager.instance.unregisterContextListener("lobby", _handleVoiceAction);
-    
-    // Unregister registry handlers
-    final registry = VoiceCommandRegistry.instance;
-    registry.unregisterHandler("START_MATCH");
-    registry.unregisterHandler("START_GAME");
-    registry.unregisterHandler("LEAVE_ROOM");
-    registry.unregisterHandler("ADD_BOT");
-    registry.unregisterHandler("TOGGLE_READY");
-    registry.unregisterHandler("INVITE_FRIEND");
-
     // If room hasn't started and we exit, clean up connection
     if (_room == null || _room!.status == 'waiting') {
+      if (_socket.isMockMode) {
+        _socket.isMockMode = false;
+      }
       _socket.disconnect();
     }
     super.dispose();

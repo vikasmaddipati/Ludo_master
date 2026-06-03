@@ -25,12 +25,12 @@ class LudoBoard extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -65,7 +65,6 @@ class LudoBoard extends StatelessWidget {
 
   // Large corner base housing un-spawned tokens
   Widget _buildHomeBase(Color color, String colorKey, int row, int col) {
-    // Check if it's in the inner box of the corner base
     bool isInnerBox = false;
     bool isPocket = false;
     
@@ -83,26 +82,40 @@ class LudoBoard extends StatelessWidget {
       isPocket = (row == 11 || row == 12) && (col == 11 || col == 12);
     }
 
-    Color cellBgColor = isInnerBox ? Colors.white : color;
+    Color cellBgColor = isInnerBox ? AppColors.surface : color;
+    Gradient? baseGradient;
+    
+    if (!isInnerBox) {
+      if (colorKey == 'red') baseGradient = AppColors.boardRedGradient;
+      if (colorKey == 'green') baseGradient = AppColors.boardGreenGradient;
+      if (colorKey == 'yellow') baseGradient = AppColors.boardYellowGradient;
+      if (colorKey == 'blue') baseGradient = AppColors.boardBlueGradient;
+    }
     
     return Container(
       decoration: BoxDecoration(
-        color: cellBgColor,
-        // Seamless border layout to merge outer cells perfectly
+        color: baseGradient == null ? cellBgColor : null,
+        gradient: baseGradient,
         border: Border.all(
-          color: isInnerBox ? Colors.grey.shade300 : color.withOpacity(0.3),
+          color: isInnerBox ? Colors.white10 : color.withValues(alpha: 0.2),
           width: 0.3,
         ),
       ),
       child: Center(
         child: isPocket
             ? Container(
-                width: 18,
-                height: 18,
+                width: 20,
+                height: 20,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
-                  border: Border.all(color: color.withOpacity(0.8), width: 1.5),
+                  border: Border.all(color: color.withValues(alpha: 0.6), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                    )
+                  ],
                 ),
                 child: Center(
                   child: _renderTokensInBase(colorKey, row, col),
@@ -116,15 +129,21 @@ class LudoBoard extends StatelessWidget {
   // Draw target goal triangles in the center
   Widget _buildCenterGoal(int row, int col) {
     Color cellColor = AppColors.surfaceLight;
-    if (row == 7 && col == 7) cellColor = Colors.white;
-    else if (row == 6) cellColor = AppColors.green;
-    else if (row == 8) cellColor = AppColors.blue;
-    else if (col == 6) cellColor = AppColors.red;
-    else if (col == 8) cellColor = AppColors.yellow;
+    Gradient? goalGradient;
+    
+    if (row == 7 && col == 7) {
+      cellColor = Colors.white;
+    } else {
+      if (row == 6) goalGradient = AppColors.boardGreenGradient;
+      else if (row == 8) goalGradient = AppColors.boardBlueGradient;
+      else if (col == 6) goalGradient = AppColors.boardRedGradient;
+      else if (col == 8) goalGradient = AppColors.boardYellowGradient;
+    }
 
     return Container(
       decoration: BoxDecoration(
-        color: cellColor,
+        color: goalGradient == null ? cellColor : null,
+        gradient: goalGradient,
         border: Border.all(color: AppColors.background, width: 0.5),
       ),
       child: Center(
@@ -159,6 +178,14 @@ class LudoBoard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cellColor ?? AppColors.surfaceLight,
         border: Border.all(color: AppColors.background, width: 0.5),
+        boxShadow: isSafe
+            ? [
+                BoxShadow(
+                  color: (cellColor ?? Colors.white).withValues(alpha: 0.15),
+                  blurRadius: 4,
+                )
+              ]
+            : null,
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -166,8 +193,8 @@ class LudoBoard extends StatelessWidget {
           if (isSafe)
             Icon(
               Icons.star,
-              size: 12,
-              color: Colors.white.withOpacity(0.4),
+              size: 14,
+              color: Colors.white.withValues(alpha: 0.6),
             ),
           _renderTokensOnTrack(row, col),
         ],
@@ -177,7 +204,6 @@ class LudoBoard extends StatelessWidget {
 
   // Render tokens located inside the player home bases (position = -1)
   Widget _renderTokensInBase(String color, int row, int col) {
-    // Map base indices to match base coordinates (top left, top right, bottom left, bottom right)
     int targetTokenId = -1;
     if (color == 'red') {
       if (row == 2 && col == 2) targetTokenId = 0;
@@ -224,14 +250,13 @@ class LudoBoard extends StatelessWidget {
 
     if (tokensHere.isEmpty) return const SizedBox.shrink();
 
-    // Render stack/grid of tokens if multiple reside in the same track cell
     return Stack(
       children: tokensHere.map((token) {
         return Align(
           alignment: _getStackAlignment(tokensHere.indexOf(token), tokensHere.length),
           child: SizedBox(
-            width: tokensHere.length > 1 ? 14 : 20,
-            height: tokensHere.length > 1 ? 14 : 20,
+            width: tokensHere.length > 1 ? 14 : 22,
+            height: tokensHere.length > 1 ? 14 : 22,
             child: _buildInteractiveToken(token.color, token.tokenId),
           ),
         );
@@ -288,7 +313,7 @@ class LudoBoard extends StatelessWidget {
           }
         },
         child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: canMove ? 1.2 : 1.0),
+          tween: Tween(begin: 1.0, end: canMove ? 1.25 : 1.0),
           duration: const Duration(milliseconds: 300),
           curve: Curves.elasticOut,
           builder: (context, scale, child) {
@@ -301,9 +326,9 @@ class LudoBoard extends StatelessWidget {
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: tokenColor.withOpacity(canMove ? 0.9 : 0.4),
-                      blurRadius: canMove ? 10 : 4,
-                      spreadRadius: canMove ? 3 : 0,
+                      color: tokenColor.withValues(alpha: canMove ? 0.95 : 0.4),
+                      blurRadius: canMove ? 12 : 4,
+                      spreadRadius: canMove ? 4 : 0,
                     ),
                   ],
                 ),
@@ -311,7 +336,7 @@ class LudoBoard extends StatelessWidget {
                     ? const Center(
                         child: Icon(
                           Icons.touch_app,
-                          size: 10,
+                          size: 11,
                           color: Colors.white,
                         ),
                       )
@@ -340,8 +365,6 @@ class LudoBoard extends StatelessWidget {
 
   // Standard static Ludo board coordinate mapper
   List<int> getGridCoords(String color, int position) {
-    // Coordinates path sequence starting from color spawns clockwise:
-    // (Red clockwise sequence, etc.)
     final List<List<int>> redMainPath = [
       [6, 1], [6, 2], [6, 3], [6, 4], [6, 5],
       [5, 6], [4, 6], [3, 6], [2, 6], [1, 6], [0, 6],
@@ -368,7 +391,6 @@ class LudoBoard extends StatelessWidget {
       globalIdx = (position + 39) % 52;
     }
 
-    // Reached Home Stretch
     if (position >= 51 && position < 57) {
       final stretchOffset = position - 51;
       if (color == 'red') return [7, 1 + stretchOffset];

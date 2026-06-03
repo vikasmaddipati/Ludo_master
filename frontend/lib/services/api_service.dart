@@ -2,12 +2,25 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../models/friend_model.dart';
 import '../models/game_room_model.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.13:3000/api';
+  static String baseUrl = 'http://192.168.1.13:3000/api';
+
+  static Future<void> initBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedUrl = prefs.getString('server_url') ?? 'http://192.168.1.13:3000';
+    baseUrl = '$savedUrl/api';
+    print('[API DEBUG] API Base URL loaded: $baseUrl');
+  }
+
+  static void updateBaseUrl(String newUrl) {
+    baseUrl = '$newUrl/api';
+    print('[API DEBUG] Base URL override updated: $baseUrl');
+  }
 
   // Auth: Google Login
   static Future<UserModel?> authenticateGoogleUser({
@@ -65,8 +78,8 @@ class ApiService {
     // Dynamic sandbox/offline bypass
     final randomCode = (100000 + Random().nextInt(900000)).toString();
     return GameRoomModel(
-      id: 'room_$randomCode',
-      roomCode: randomCode,
+      id: 'room_sandbox_$randomCode',
+      roomCode: 'sandbox_$randomCode',
       creator: userId,
       status: 'waiting',
       turn: 'red',
@@ -76,6 +89,7 @@ class ApiService {
         PlayerModel(userId: userId, name: name, color: 'red', isReady: true, isConnected: true, isBot: false)
       ],
       tokens: [],
+      messages: [],
     );
   }
 
@@ -126,10 +140,10 @@ class ApiService {
   }
 
   // Fetch voice LiveKit Token
-  static Future<String?> fetchLiveKitToken(String roomCode, String name) async {
+  static Future<String?> fetchLiveKitToken(String roomCode, String userId, String name) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/game/livekit-token?roomCode=$roomCode&name=$name'),
+        Uri.parse('$baseUrl/game/livekit-token?roomCode=$roomCode&userId=$userId&name=$name'),
       );
 
       if (response.statusCode == 200) {

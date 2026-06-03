@@ -19,6 +19,26 @@ const COLOR_ORDER = ['red', 'green', 'yellow', 'blue'];
 
 const activeUserSockets = new Map(); // userId -> socket.id
 
+const roomTurnTimers = new Map();
+
+const startTurnTimer = (io, roomCode) => {
+  clearTurnTimer(roomCode);
+
+  const timer = setTimeout(async () => {
+    console.log(`[TURN TIMER] Timer expired for room: ${roomCode}. Auto-shifting turn.`);
+    await shiftTurn(io, roomCode);
+  }, 20000); // 20 seconds turn limit
+
+  roomTurnTimers.set(roomCode, timer);
+};
+
+const clearTurnTimer = (roomCode) => {
+  if (roomTurnTimers.has(roomCode)) {
+    clearTimeout(roomTurnTimers.get(roomCode));
+    roomTurnTimers.delete(roomCode);
+  }
+};
+
 const initSocket = (io) => {
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
@@ -163,6 +183,9 @@ const initSocket = (io) => {
 
         io.to(roomCode).emit('game_started', room);
         
+        // Start turn timer
+        startTurnTimer(io, roomCode);
+        
         // If first player is a Bot, trigger bot roll
         if (checkIfBotTurn(room)) {
           triggerBotAction(io, roomCode);
@@ -175,24 +198,61 @@ const initSocket = (io) => {
     // Roll Dice
     socket.on('roll_dice', async ({ roomCode }) => {
       try {
+        console.log(`[ROLL_REQUEST_RECEIVED] Roll request received for room: ${roomCode} from socket: ${socket.id}`);
         let room = await GameRoom.findOne({ roomCode });
-        if (!room || room.status !== 'playing' || room.hasRolled) return;
+        if (!room) {
+          console.log(`[ROLL ERROR] Room ${roomCode} not found in database.`);
+          return;
+        }
+        console.log(`[ROOM_FOUND] Room ${roomCode} loaded successfully`);
+        
+        if (room.status !== 'playing') {
+          console.log(`[ROLL ERROR] Room status is ${room.status}, expected 'playing'.`);
+          return;
+        }
+
+        // Validate player turn
+        const currentPlayer = room.players.find(p => p.color === room.turn);
+        console.log(`[CURRENT_TURN] Current turn is ${room.turn} (userId: ${currentPlayer?.userId})`);
+        
+        // Prevent other players from rolling for the current turn player
+        // Note: Bot rolls come from the server (checkIfBotTurn), so we only validate human rolls
+        if (!currentPlayer?.isBot && currentPlayer?.userId !== socket.userId) {
+          console.log(`[ROLL ERROR] Unauthorized roll attempt. Socket userId: ${socket.userId} does not match turn userId: ${currentPlayer?.userId}`);
+          return;
+        }
+
+        if (room.hasRolled) {
+          console.log(`[ROLL ERROR] Player has already rolled this turn.`);
+          return;
+        }
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
+        console.log(`[DICE_GENERATED] Player ${room.turn.toUpperCase()} rolled value: ${diceValue}`);
+        
         room.diceValue = diceValue;
         room.hasRolled = true;
 
         // Calculate potential valid moves
         const validTokensToMove = getValidMoves(room, room.turn, diceValue);
+        console.log(`[ROLL GENERATED] Valid moves calculation: ${JSON.stringify(validTokensToMove)}`);
 
         await room.save();
+        console.log(`[DICE_SAVED] Database updated for room ${roomCode}`);
+
         io.to(roomCode).emit('dice_rolled', { room, validTokensToMove });
+        console.log(`[STATE_BROADCASTED] dice_rolled broadcast to room ${roomCode}`);
 
         // If no moves are possible, shift turn immediately
         if (validTokensToMove.length === 0) {
+          console.log(`[ROLL] No valid moves. Auto-shifting turn for room: ${roomCode}`);
+          clearTurnTimer(roomCode);
           setTimeout(async () => {
             await shiftTurn(io, roomCode);
           }, 1500);
+        } else {
+          // Restart turn timer to allow player 20 seconds to move the token
+          startTurnTimer(io, roomCode);
         }
       } catch (err) {
         console.error(err);
@@ -291,6 +351,7 @@ const initSocket = (io) => {
         io.to(roomCode).emit('token_moved', room);
 
         if (room.status === 'finished') {
+          clearTurnTimer(roomCode);
           io.to(roomCode).emit('game_over', { winnerId: room.winnerId });
           return;
         }
@@ -300,6 +361,8 @@ const initSocket = (io) => {
           room.hasRolled = false;
           await room.save();
           io.to(roomCode).emit('room_updated', room);
+          
+          startTurnTimer(io, roomCode); // Reset timer for extra turn!
           
           if (checkIfBotTurn(room)) {
             triggerBotAction(io, roomCode);
@@ -334,13 +397,68 @@ const initSocket = (io) => {
     });
 
     // Real-Time Chat & Emojis inside room
-    socket.on('send_chat_message', ({ roomCode, senderName, message, isEmoji }) => {
-      io.to(roomCode).emit('chat_message_received', {
-        senderName,
-        message,
-        isEmoji: isEmoji || false,
-        timestamp: new Date()
-      });
+    socket.on('send_chat_message', async ({ roomCode, senderName, message, isEmoji, id }, callback) => {
+      try {
+        const msgId = id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const timestamp = new Date();
+        
+        let room = await GameRoom.findOne({ roomCode });
+        if (room) {
+          room.messages.push({
+            id: msgId,
+            senderName,
+            message,
+            isEmoji: isEmoji || false,
+            timestamp,
+            status: 'delivered'
+          });
+          await room.save();
+          
+          io.to(roomCode).emit('chat_message_received', {
+            id: msgId,
+            senderName,
+            message,
+            isEmoji: isEmoji || false,
+            timestamp,
+            status: 'delivered'
+          });
+          
+          console.log(`[SOCKET CHAT] Msg saved & broadcasted: ${senderName} in room ${roomCode}`);
+        }
+
+        if (callback) {
+          callback({ status: 'ok', id: msgId, timestamp });
+        }
+      } catch (err) {
+        console.error('Send chat message error:', err);
+        if (callback) callback({ status: 'error', error: err.message });
+      }
+    });
+
+    socket.on('mark_messages_read', async ({ roomCode, userName }) => {
+      try {
+        let room = await GameRoom.findOne({ roomCode });
+        if (room) {
+          let changed = false;
+          room.messages.forEach(msg => {
+            if (msg.senderName !== userName && msg.status !== 'read') {
+              msg.status = 'read';
+              changed = true;
+            }
+          });
+          if (changed) {
+            await room.save();
+            io.to(roomCode).emit('room_updated', room);
+            console.log(`[SOCKET CHAT] Marked messages as read by ${userName} in ${roomCode}`);
+          }
+        }
+      } catch (err) {
+        console.error('Mark messages read error:', err);
+      }
+    });
+
+    socket.on('ping_stat', (data, callback) => {
+      if (callback) callback({ status: 'ok' });
     });
 
     // Handle Network Disconnections
@@ -499,28 +617,44 @@ const getValidMoves = (room, color, diceValue) => {
 
 const shiftTurn = async (io, roomCode) => {
   try {
+    // Aggressively clear existing timer before proceeding
+    clearTurnTimer(roomCode);
+
     let room = await GameRoom.findOne({ roomCode });
-    if (!room || room.status !== 'playing') return;
+    if (!room || room.status !== 'playing') {
+      return;
+    }
 
-    const colorsInGame = room.players.map(p => p.color);
+    // Only consider players who are connected or are bots
+    const activePlayers = room.players.filter(p => p.isConnected || p.isBot);
+    const activeColorsInGame = activePlayers.map(p => p.color);
+    
+    // Fallback if everyone disconnected except bots, but we still have players
+    const colorsInGame = activeColorsInGame.length > 0 ? activeColorsInGame : room.players.map(p => p.color);
+    
     let currentIdx = COLOR_ORDER.indexOf(room.turn);
-    let nextColor = null;
-
-    // Loop through colors to find the next active player color
+    let nextColor;
+    
+    // Find next valid color
     for (let i = 1; i <= 4; i++) {
-      const nextIdx = (currentIdx + i) % 4;
-      const col = COLOR_ORDER[nextIdx];
-      if (colorsInGame.includes(col)) {
-        nextColor = col;
+      let checkIdx = (currentIdx + i) % 4;
+      if (colorsInGame.includes(COLOR_ORDER[checkIdx])) {
+        nextColor = COLOR_ORDER[checkIdx];
         break;
       }
     }
 
     room.turn = nextColor;
     room.hasRolled = false;
+    room.diceValue = 1;
     await room.save();
 
+    console.log(`[TURN_CHANGED] Turn shifted to ${nextColor} for room ${roomCode}`);
     io.to(roomCode).emit('room_updated', room);
+    console.log(`[STATE_BROADCASTED] room_updated broadcast to room ${roomCode}`);
+
+    // Start timer for new player's turn
+    startTurnTimer(io, roomCode);
 
     // If bot turn, trigger
     if (checkIfBotTurn(room)) {

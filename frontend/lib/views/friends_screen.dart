@@ -3,9 +3,6 @@ import '../constants/app_colors.dart';
 import '../models/user_model.dart';
 import '../models/friend_model.dart';
 import '../services/api_service.dart';
-import '../services/global_voice_manager.dart';
-import '../services/voice_command_registry.dart';
-import '../services/voice_assistant_service.dart';
 import '../services/accessibility_service.dart';
 import '../widgets/accessible_interactive.dart';
 
@@ -36,93 +33,8 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
     _tabController = TabController(length: 3, vsync: this);
     _loadFriends();
     _loadRequests();
-
-    // Register voice handlers for social actions
-    final registry = VoiceCommandRegistry.instance;
-    registry.registerHandler("ADD_FRIEND", (params) async => _handleVoiceAction("ADD_FRIEND", params));
-    registry.registerHandler("ACCEPT_FRIEND", (params) async => _handleVoiceAction("ACCEPT_FRIEND", params));
-    registry.registerHandler("REJECT_FRIEND", (params) async => _handleVoiceAction("REJECT_FRIEND", params));
-    registry.registerHandler("REMOVE_FRIEND", (params) async => _handleVoiceAction("REMOVE_FRIEND", params));
   }
 
-  void _handleVoiceAction(String action, Map<String, dynamic> params) {
-    if (!mounted) return;
-
-    if (action == "ADD_FRIEND") {
-      // Search by name and send friend request
-      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
-      if (nameQuery.isNotEmpty) {
-        _searchController.text = nameQuery;
-        _handleSearch().then((_) {
-          if (_searchResults.isNotEmpty) {
-            final match = _searchResults.firstWhere(
-              (u) => u.name.toLowerCase().contains(nameQuery),
-              orElse: () => _searchResults.first,
-            );
-            _sendFriendRequest(match);
-            VoiceAssistantService.instance.speak(
-              "Sending friend request to ${match.name}.", context);
-          } else {
-            VoiceAssistantService.instance.speak(
-              "Could not find player named $nameQuery.", context);
-          }
-        });
-      } else {
-        // Navigate to search tab
-        _tabController.animateTo(1);
-        VoiceAssistantService.instance.speak("Opening friend search.", context);
-      }
-    } else if (action == "ACCEPT_FRIEND") {
-      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
-      if (_incomingRequests.isEmpty) {
-        VoiceAssistantService.instance.speak("You have no pending friend requests.", context);
-      } else {
-        final req = nameQuery.isNotEmpty
-            ? _incomingRequests.firstWhere(
-                (r) => r.requester.name.toLowerCase().contains(nameQuery),
-                orElse: () => _incomingRequests.first,
-              )
-            : _incomingRequests.first;
-        _acceptRequest(req);
-        VoiceAssistantService.instance.speak(
-          "Accepting friend request from ${req.requester.name}.", context);
-      }
-    } else if (action == "REJECT_FRIEND") {
-      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
-      if (_incomingRequests.isEmpty) {
-        VoiceAssistantService.instance.speak("You have no pending friend requests.", context);
-      } else {
-        final req = nameQuery.isNotEmpty
-            ? _incomingRequests.firstWhere(
-                (r) => r.requester.name.toLowerCase().contains(nameQuery),
-                orElse: () => _incomingRequests.first,
-              )
-            : _incomingRequests.first;
-        _rejectRequest(req);
-        VoiceAssistantService.instance.speak(
-          "Rejecting friend request from ${req.requester.name}.", context);
-      }
-    } else if (action == "REMOVE_FRIEND") {
-      final nameQuery = (params['name'] ?? "").toString().toLowerCase().trim();
-      if (_friends.isEmpty) {
-        VoiceAssistantService.instance.speak("Your friends list is empty.", context);
-      } else if (nameQuery.isEmpty) {
-        VoiceAssistantService.instance.speak("Please say the name of the friend to remove.", context);
-      } else {
-        try {
-          final match = _friends.firstWhere(
-            (f) => f.friend.name.toLowerCase().contains(nameQuery),
-          );
-          _unfriend(match);
-          VoiceAssistantService.instance.speak(
-            "Removing ${match.friend.name} from your friends list.", context);
-        } catch (e) {
-          VoiceAssistantService.instance.speak(
-            "Could not find $nameQuery in your friends list.", context);
-        }
-      }
-    }
-  }
 
   Future<void> _loadFriends() async {
     setState(() => _isLoadingFriends = true);
@@ -606,13 +518,6 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
 
   @override
   void dispose() {
-    // Unregister voice handlers
-    final registry = VoiceCommandRegistry.instance;
-    registry.unregisterHandler("ADD_FRIEND");
-    registry.unregisterHandler("ACCEPT_FRIEND");
-    registry.unregisterHandler("REJECT_FRIEND");
-    registry.unregisterHandler("REMOVE_FRIEND");
-
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();

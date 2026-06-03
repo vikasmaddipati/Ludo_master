@@ -63,13 +63,13 @@ const getRoomDetails = async (req, res) => {
 
 const getLiveKitToken = async (req, res) => {
   try {
-    const { roomCode, name } = req.query;
+    const { roomCode, userId, name } = req.query;
 
-    if (!roomCode || !name) {
-      return res.status(400).json({ success: false, message: 'Room code and user name are required.' });
+    if (!roomCode || !userId || !name) {
+      return res.status(400).json({ success: false, message: 'Room code, userId and user name are required.' });
     }
 
-    const token = generateLiveKitToken(roomCode, name);
+    const token = await generateLiveKitToken(roomCode, userId, name);
 
     res.status(200).json({
       success: true,

@@ -77,6 +77,14 @@ const gameRoomSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  messages: [{
+    id: String,
+    senderName: String,
+    message: String,
+    isEmoji: { type: Boolean, default: false },
+    timestamp: { type: Date, default: Date.now },
+    status: { type: String, enum: ['sending', 'delivered', 'read'], default: 'delivered' }
+  }],
   createdAt: {
     type: Date,
     default: Date.now,

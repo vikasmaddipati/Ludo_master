@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import 'api_service.dart';
 
@@ -23,18 +24,68 @@ class AuthService {
   UserModel? _currentUser;
   UserModel? get currentUser => _currentUser;
 
+  Future<bool> isUsernameSetupCompleted(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('username_setup_done_$userId') ?? false;
+  }
+
+  Future<void> syncPersonalizedProfile(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedName = prefs.getString('personalized_name_${user.id}');
+    final cachedAvatar = prefs.getString('personalized_avatar_${user.id}');
+    
+    if (cachedName != null || cachedAvatar != null) {
+      _currentUser = UserModel(
+        id: user.id,
+        googleId: user.googleId,
+        name: cachedName ?? user.name,
+        email: user.email,
+        avatarUrl: cachedAvatar ?? user.avatarUrl,
+        coins: user.coins,
+        wins: user.wins,
+        losses: user.losses,
+        fcmToken: user.fcmToken,
+      );
+    } else {
+      _currentUser = user;
+    }
+  }
+
+  Future<void> updatePersonalizedProfile(String newName, String newAvatar) async {
+    if (_currentUser == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('personalized_name_${_currentUser!.id}', newName);
+    await prefs.setString('personalized_avatar_${_currentUser!.id}', newAvatar);
+    await prefs.setBool('username_setup_done_${_currentUser!.id}', true);
+    
+    _currentUser = UserModel(
+      id: _currentUser!.id,
+      googleId: _currentUser!.googleId,
+      name: newName,
+      email: _currentUser!.email,
+      avatarUrl: newAvatar,
+      coins: _currentUser!.coins,
+      wins: _currentUser!.wins,
+      losses: _currentUser!.losses,
+      fcmToken: _currentUser!.fcmToken,
+    );
+  }
+
   Future<UserModel?> checkCurrentUserSession() async {
     if (_currentUser != null) return _currentUser;
 
     try {
       final firebaseUser = _auth.currentUser;
       if (firebaseUser != null) {
-        _currentUser = await ApiService.authenticateGoogleUser(
+        final serverUser = await ApiService.authenticateGoogleUser(
           googleId: firebaseUser.uid,
           name: firebaseUser.displayName ?? 'Player',
           email: firebaseUser.email ?? '',
           avatarUrl: firebaseUser.photoURL ?? 'https://api.dicebear.com/7.x/bottts/png',
         );
+        if (serverUser != null) {
+          await syncPersonalizedProfile(serverUser);
+        }
         return _currentUser;
       }
     } catch (e) {
@@ -48,12 +99,16 @@ class AuthService {
       // If using the local mock client ID, bypass Google popup to go straight to Sandbox Guest!
       if (_googleSignIn.clientId?.contains('mockclientid') == true) {
         print('Local Sandbox client ID detected. Bypassing Google OAuth popup.');
-        return _createSandboxGuestUser();
+        final guest = _createSandboxGuestUser();
+        await syncPersonalizedProfile(guest);
+        return _currentUser;
       }
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        return _createSandboxGuestUser();
+        final guest = _createSandboxGuestUser();
+        await syncPersonalizedProfile(guest);
+        return _currentUser;
       }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -66,31 +121,36 @@ class AuthService {
       final firebaseUser = userCredential.user;
 
       if (firebaseUser != null) {
-        _currentUser = await ApiService.authenticateGoogleUser(
+        final serverUser = await ApiService.authenticateGoogleUser(
           googleId: firebaseUser.uid,
           name: firebaseUser.displayName ?? 'Player',
           email: firebaseUser.email ?? '',
           avatarUrl: firebaseUser.photoURL ?? 'https://api.dicebear.com/7.x/adventurer/png?seed=${firebaseUser.uid}',
         );
-        if (_currentUser == null) {
+        if (serverUser == null) {
           print('Backend API authentication failed/returned null. Falling back to Sandbox Guest.');
-          return _createSandboxGuestUser();
+          final guest = _createSandboxGuestUser();
+          await syncPersonalizedProfile(guest);
+          return _currentUser;
         }
+        await syncPersonalizedProfile(serverUser);
         return _currentUser;
       }
     } catch (e) {
       print('Google/Firebase Sign-In failed: $e. Falling back to Sandbox Guest Mode.');
-      return _createSandboxGuestUser();
+      final guest = _createSandboxGuestUser();
+      await syncPersonalizedProfile(guest);
+      return _currentUser;
     }
     return null;
   }
 
   UserModel _createSandboxGuestUser() {
-    final guestId = 'sandbox_guest_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+    final guestId = 'sandbox_guest'; // Stable guest ID for local session persistence
     _currentUser = UserModel(
       id: guestId,
       googleId: 'google_$guestId',
-      name: 'vikas',
+      name: 'ProLudoPlayer',
       email: 'guest@sandbox.local',
       avatarUrl: 'https://api.dicebear.com/7.x/adventurer/png?seed=$guestId',
       coins: 1000,

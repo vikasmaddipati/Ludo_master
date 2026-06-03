@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../services/auth_service.dart';
 import '../services/audio_service.dart';
+import '../models/user_model.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -131,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _checkActiveSession() async {
     final cachedUser = await _authService.checkCurrentUserSession();
     if (cachedUser != null) {
-      _navigateToHome();
+      _navigateToNextScreen(cachedUser);
     }
   }
 
@@ -141,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (user != null) {
-      _navigateToHome();
+      _navigateToNextScreen(user);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Authentication failed. Running locally.')),
@@ -149,7 +150,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _navigateToHome() {
-    Navigator.pushReplacementNamed(context, '/home');
+  void _navigateToNextScreen(UserModel user) async {
+    final completed = await _authService.isUsernameSetupCompleted(user.id);
+    if (mounted) {
+      if (completed) {
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        Navigator.pushReplacementNamed(context, '/username_setup');
+      }
+    }
   }
 }
