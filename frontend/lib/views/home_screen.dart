@@ -200,13 +200,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Join Online Room', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: AppColors.primary.withOpacity(0.3), width: 1.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.vpn_key, color: AppColors.secondary),
+            SizedBox(width: 10),
+            Text(
+              'Join Online Room',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
         content: Semantics(
           label: "Enter six-digit room code text field",
           child: TextField(
             controller: _roomCodeController,
             keyboardType: TextInputType.number,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             maxLength: 6,
             onChanged: (text) {
               if (text.isNotEmpty) {
@@ -214,17 +227,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 AccessibilityService.instance.speak(lastChar, force: true);
               }
             },
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'Enter 6-digit room code',
-              hintStyle: TextStyle(color: AppColors.textSecondary),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textSecondary)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+              hintStyle: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.normal),
+              counterStyle: const TextStyle(color: AppColors.textSecondary),
+              filled: true,
+              fillColor: AppColors.surfaceLight.withOpacity(0.6),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: AppColors.secondary, width: 1.5),
+              ),
             ),
           ),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           TextButton(
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
             onPressed: () {
               AccessibilityService.instance.triggerHaptic(intensity: 'light');
               AccessibilityService.instance.speak("Cancel selected", force: true);
@@ -232,8 +255,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             },
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Join', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Text('Join', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             onPressed: () {
               final code = _roomCodeController.text.trim();
               AccessibilityService.instance.triggerHaptic(intensity: 'medium');
@@ -293,81 +320,89 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundImage: NetworkImage(user.avatarUrl),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                user.name,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                overflow: TextOverflow.ellipsis,
+      appBar: _currentIndex == 0
+          ? null
+          : AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              title: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundImage: NetworkImage(user.avatarUrl),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      user.name,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
+              actions: [
+                // Settings Gear
+                Semantics(
+                  label: "Settings Hub",
+                  hint: "Open accessibility and audio configurations.",
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.settings, color: Colors.white, size: 20),
+                    tooltip: 'Settings Hub',
+                    onPressed: () {
+                      AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                      AccessibilityService.instance.speak("Settings Hub selected");
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          // Settings Gear
-          Semantics(
-            label: "Settings Hub",
-            hint: "Open accessibility and audio configurations.",
-            button: true,
-            child: IconButton(
-              icon: const Icon(Icons.settings, color: Colors.white, size: 20),
-              tooltip: 'Settings Hub',
-              onPressed: () {
-                AccessibilityService.instance.triggerHaptic(intensity: 'medium');
-                AccessibilityService.instance.speak("Settings Hub selected");
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
       body: tabs[_currentIndex],
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.06), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-          border: Border(
-            top: BorderSide(color: AppColors.primary.withValues(alpha: 0.25), width: 1.5),
+          child: BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+                _playSubMenu = 0; // Reset home screen submenu
+              });
+              _updateActiveScreenContext(index);
+            },
+            backgroundColor: Colors.transparent,
+            selectedItemColor: AppColors.secondary,
+            unselectedItemColor: AppColors.textSecondary,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+            unselectedLabelStyle: const TextStyle(fontSize: 9),
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.gamepad), label: 'Play'),
+              BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Rewards'),
+              BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Friends'),
+              BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Leaderboard'),
+              BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            ],
           ),
-        ),
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-              _playSubMenu = 0; // Reset home screen submenu
-            });
-            _updateActiveScreenContext(index);
-          },
-          backgroundColor: Colors.transparent,
-          selectedItemColor: AppColors.secondary,
-          unselectedItemColor: AppColors.textSecondary,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-          unselectedLabelStyle: const TextStyle(fontSize: 9),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Rewards'),
-            BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Friends'),
-            BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Rank'),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          ],
         ),
       ),
     );
@@ -466,110 +501,272 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildMainPlayContent(UserModel user) {
-    final int totalGames = user.wins + user.losses;
-    final double winRate = totalGames > 0 ? (user.wins / totalGames) * 100 : 0.0;
-
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildWelcomeHeader(UserModel user) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.06), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 16,
+            spreadRadius: 1,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
-          const SizedBox(height: 10),
-          // Logo/Header
-          Center(
-            child: ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [Color(0xFFFFD700), Color(0xFFFFA500), Color(0xFFFF4500)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ).createShader(bounds),
-              child: const Text(
-                'LUDO MASTER',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 3.0,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black45,
-                      offset: Offset(0, 4),
-                      blurRadius: 8,
+          // Avatar with online indicator ring
+          Stack(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppColors.secondary, AppColors.primary],
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundImage: NetworkImage(user.avatarUrl),
+                ),
+              ),
+              Positioned(
+                bottom: 1,
+                right: 1,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: AppColors.green,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.surface, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          // User welcome area
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  user.name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Online',
+                      style: TextStyle(
+                        color: AppColors.green,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          const Center(
-            child: Text(
-              'CONQUER THE BOARD IN REAL-TIME',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Stats Dashboard
+          // Rank Badge
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.5),
+              color: AppColors.surfaceLight.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.withOpacity(0.3)),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: _buildStatItem(
-                    icon: Icons.emoji_events,
-                    iconColor: Colors.amber,
-                    label: 'Wins',
-                    value: '${user.wins}',
-                  ),
-                ),
-                Container(height: 40, width: 1.5, color: Colors.white24),
-                Expanded(
-                  child: _buildStatItem(
-                    icon: Icons.percent,
-                    iconColor: AppColors.green,
-                    label: 'Win Rate',
-                    value: '${winRate.toStringAsFixed(1)}%',
-                  ),
-                ),
-                Container(height: 40, width: 1.5, color: Colors.white24),
-                Expanded(
-                  child: _buildStatItem(
-                    icon: Icons.videogame_asset,
-                    iconColor: AppColors.secondary,
-                    label: 'Battles',
-                    value: '$totalGames',
+                const Icon(Icons.stars, color: Colors.amber, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'Gold ${user.wins > 10 ? "III" : "I"}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white70, size: 20),
+            onPressed: () {
+              AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+              AccessibilityService.instance.speak("Settings Hub selected");
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildQuickActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacity(0.22),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsRow(UserModel user) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'QUICK ACTIONS',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildQuickActionButton(
+              icon: Icons.add_box,
+              label: 'Create Room',
+              color: AppColors.primary,
+              onTap: () {
+                AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                _showOnlinePlayerCountDialog(user);
+              },
+            ),
+            _buildQuickActionButton(
+              icon: Icons.vpn_key,
+              label: 'Join Room',
+              color: AppColors.secondary,
+              onTap: () {
+                AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                _showJoinRoomDialog();
+              },
+            ),
+            _buildQuickActionButton(
+              icon: Icons.people_outline,
+              label: 'Friends',
+              color: AppColors.blue,
+              onTap: () {
+                AccessibilityService.instance.triggerHaptic(intensity: 'light');
+                setState(() {
+                  _currentIndex = 2;
+                });
+                _updateActiveScreenContext(2);
+              },
+            ),
+            _buildQuickActionButton(
+              icon: Icons.person_outline,
+              label: 'Profile',
+              color: AppColors.red,
+              onTap: () {
+                AccessibilityService.instance.triggerHaptic(intensity: 'light');
+                setState(() {
+                  _currentIndex = 4;
+                });
+                _updateActiveScreenContext(4);
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainPlayContent(UserModel user) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildWelcomeHeader(user),
+          const SizedBox(height: 20),
+          _buildQuickActionsRow(user),
+          const SizedBox(height: 24),
           const Text(
             'SELECT GAME MODE',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 10,
               fontWeight: FontWeight.bold,
               color: Colors.white70,
               letterSpacing: 1.5,
             ),
           ),
-          const SizedBox(height: 16),
-
+          const SizedBox(height: 12),
           _buildPrimaryGridCard(
             title: "BOT ARENA",
             subtitle: "Practice offline vs smart AI bots",
@@ -587,10 +784,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               setState(() => _playSubMenu = 1);
             },
           ),
-          const SizedBox(height: 16),
-
+          const SizedBox(height: 14),
           _buildPrimaryGridCard(
-            title: "PASS & PLAY",
+            title: "LOCAL ARENA",
             subtitle: "Play offline with local friends",
             icon: Icons.people,
             gradient: const LinearGradient(
@@ -602,14 +798,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             badgeText: "LOCAL",
             onTap: () {
               AccessibilityService.instance.triggerHaptic(intensity: 'medium');
-              AccessibilityService.instance.speak("Pass and Play selected. Choose player counts.");
+              AccessibilityService.instance.speak("Local Arena selected. Choose player counts.");
               setState(() => _playSubMenu = 2);
             },
           ),
-          const SizedBox(height: 16),
-
+          const SizedBox(height: 14),
           _buildPrimaryGridCard(
-            title: "ONLINE MATCH",
+            title: "ONLINE ARENA",
             subtitle: "Battle against players with live voice",
             icon: Icons.public,
             gradient: const LinearGradient(
@@ -621,44 +816,34 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             badgeText: "VOICE CHAT",
             onTap: () {
               AccessibilityService.instance.triggerHaptic(intensity: 'medium');
-              AccessibilityService.instance.speak("Online Match selected. Host or Join online room.");
+              AccessibilityService.instance.speak("Online Arena selected. Host or Join online room.");
               setState(() => _playSubMenu = 3);
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
+          _buildPrimaryGridCard(
+            title: "FRIENDS",
+            subtitle: "Connect and play with your buddies",
+            icon: Icons.handshake,
+            gradient: const LinearGradient(
+              colors: [Color(0xFFF39C12), Color(0xFFD35400)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            glowColor: const Color(0xFFF39C12),
+            badgeText: "SOCIAL",
+            onTap: () {
+              AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+              AccessibilityService.instance.speak("Friends page selected.");
+              setState(() {
+                _currentIndex = 2;
+              });
+              _updateActiveScreenContext(2);
+            },
+          ),
+          const SizedBox(height: 20),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatItem({
-    required IconData icon,
-    required Color iconColor,
-    required String label,
-    required String value,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: iconColor, size: 24),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 
@@ -676,65 +861,58 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       hint: subtitle,
       onTap: onTap,
       child: Container(
-        height: 120,
+        height: 105,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: glowColor.withValues(alpha: 0.35), width: 1.5),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: glowColor.withOpacity(0.25), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: glowColor.withValues(alpha: 0.15),
+              color: glowColor.withOpacity(0.22),
               blurRadius: 16,
-              offset: const Offset(0, 4),
+              spreadRadius: 1,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(18),
           child: Stack(
             children: [
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      gradient.colors[0].withValues(alpha: 0.85),
-                      gradient.colors[1].withValues(alpha: 0.7),
+                      gradient.colors[0].withOpacity(0.9),
+                      gradient.colors[1].withOpacity(0.75),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                 ),
               ),
-              Positioned.fill(
-                child: Container(
-                  color: Colors.white.withValues(alpha: 0.04),
-                ),
-              ),
               Positioned(
-                right: -30,
-                bottom: -30,
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.06),
-                  ),
+                right: -15,
+                bottom: -15,
+                child: Icon(
+                  icon,
+                  size: 80,
+                  color: Colors.white.withOpacity(0.08),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.black26,
+                        color: Colors.black12,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white24, width: 1),
+                        border: Border.all(color: Colors.white12, width: 1),
                       ),
-                      child: Icon(icon, color: Colors.white, size: 28),
+                      child: Icon(icon, color: Colors.white, size: 24),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -746,22 +924,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 child: Text(
                                   title,
                                   style: const TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.w900,
                                     color: Colors.white,
                                     letterSpacing: 0.8,
-                                    shadows: [
-                                      Shadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 1)),
-                                    ],
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
+                                  color: Colors.white.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -771,15 +946,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             subtitle,
-                            style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                            style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 12),
                   ],
                 ),
               ),
@@ -859,7 +1034,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // Local Pass & Play Menu
+  // Local Local Arena Menu
   Widget _buildLocalSubMenu(UserModel user) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -874,7 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 onPressed: () => setState(() => _playSubMenu = 0),
               ),
               const SizedBox(width: 8),
-              const Text('PASS & PLAY', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16)),
+              const Text('LOCAL ARENA', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16)),
             ],
           ),
           const SizedBox(height: 20),
@@ -915,7 +1090,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // Online Match Menu
+  // Online Arena Menu
   Widget _buildOnlineSubMenu(UserModel user) {
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -929,7 +1104,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 onPressed: () => setState(() => _playSubMenu = 0),
               ),
               const SizedBox(width: 8),
-              const Text('ONLINE MULTIPLAYER', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16)),
+              const Text('ONLINE ARENA', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16)),
             ],
           ),
           const SizedBox(height: 20),
@@ -966,41 +1141,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       hint: subtitle,
       onTap: onTap,
       child: Container(
-        height: 80,
+        height: 75,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.2),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 14,
+              spreadRadius: 1,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           child: Stack(
             children: [
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      gradient.colors[0].withValues(alpha: 0.8),
-                      gradient.colors[1].withValues(alpha: 0.65),
+                      gradient.colors[0].withOpacity(0.85),
+                      gradient.colors[1].withOpacity(0.7),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                 ),
               ),
-              Positioned.fill(
-                child: Container(
-                  color: Colors.white.withValues(alpha: 0.03),
-                ),
-              ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 child: Row(
                   children: [
                     Expanded(
@@ -1013,19 +1184,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             style: const TextStyle(
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
-                              fontSize: 14,
+                              fontSize: 13,
                               letterSpacing: 0.5,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             subtitle,
-                            style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
+                            style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 12),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 10),
                   ],
                 ),
               ),

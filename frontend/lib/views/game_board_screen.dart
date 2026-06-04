@@ -45,6 +45,7 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
 
   final List<FloatingEmoji> _activeEmojis = [];
   bool _showDebugPanel = false;
+  bool _isWinnerDialogShown = false;
 
   String? _presetNotifyText;
   String? _presetNotifySender;
@@ -304,14 +305,15 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
     final myPlayer = _room.players.firstWhere((p) => p.userId == widget.myUser.id);
     final myColor = myPlayer.color;
     
-    // In local Pass & Play (mock mode), any human turn counts as "my turn" for interaction on this physical screen!
+    // In local Local Arena (mock mode), any human turn counts as "my turn" for interaction on this physical screen!
     final activeTurnPlayer = _room.players.firstWhere(
       (p) => p.color == _room.turn,
       orElse: () => myPlayer,
     );
-    final isMyTurn = widget.socket.isMockMode 
+    final isGameOver = _room.status == 'finished';
+    final isMyTurn = !isGameOver && (widget.socket.isMockMode 
         ? !activeTurnPlayer.isBot 
-        : _room.turn == myColor;
+        : _room.turn == myColor);
     
     // Dynamically synchronize the room state for offline fallback support
     widget.socket.syncMockRoom(_room);
@@ -485,19 +487,19 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: _getColorValue(_room.turn).withOpacity(0.25),
-                        blurRadius: 16,
+                        color: _getColorValue(_room.turn).withOpacity(0.35),
+                        blurRadius: 18,
                         spreadRadius: 2,
                       ),
                       BoxShadow(
                         color: Colors.black.withOpacity(0.35),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                     border: Border.all(
-                      color: _getColorValue(_room.turn).withOpacity(0.35),
-                      width: 1.5,
+                      color: _getColorValue(_room.turn).withOpacity(0.5),
+                      width: 2.0,
                     ),
                   ),
                   child: Row(
@@ -785,12 +787,20 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
                 ),
                 const SizedBox(height: 16),
     
-                // Gameplay controller (Dice roll buttons)
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withOpacity(0.06), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.4),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -888,6 +898,7 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
                               isMyTurn: isMyTurn,
                               hasRolled: _room.hasRolled,
                               onTap: () {
+                                if (_room.status == 'finished') return;
                                 if (isMyTurn && !_room.hasRolled) {
                                   AccessibilityService.instance.triggerHaptic(intensity: 'heavy');
                                   AccessibilityService.instance.speak("Rolling the Ludo dice");
@@ -1240,13 +1251,13 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
     // Handle game over limits
     widget.socket.onGameOver((winnerId) {
       if (mounted) {
+        final winnerPlayer = _room.players.firstWhere(
+          (p) => p.userId == winnerId,
+          orElse: () => PlayerModel(userId: winnerId, name: 'Winner', color: 'red', isReady: true, isConnected: true, isBot: false),
+        );
+        final winnerName = winnerPlayer.name;
         _showWinnerAlert(winnerId);
-        final isWinner = winnerId == widget.myUser.id;
-        if (isWinner) {
-          AccessibilityService.instance.announceGameEvent("Congratulations. You won the match.", type: 'game_over');
-        } else {
-          AccessibilityService.instance.announceGameEvent("Match finished.", type: 'game_over');
-        }
+        AccessibilityService.instance.speak("Congratulations! $winnerName is the winner.", force: true);
       }
     });
 
@@ -1277,6 +1288,7 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
   }
 
   void _handleTokenMovement(int tokenId) {
+    if (_room.status == 'finished') return;
     widget.socket.moveToken(_room.roomCode, tokenId);
   }
 
@@ -1339,9 +1351,23 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
   }
 
   void _showWinnerAlert(String winnerId) {
-    final winnerPlayer = _room.players.firstWhere((p) => p.userId == winnerId);
+    if (_isWinnerDialogShown) return;
+    setState(() {
+      _isWinnerDialogShown = true;
+    });
+
+    final winnerPlayer = _room.players.firstWhere(
+      (p) => p.userId == winnerId,
+      orElse: () => PlayerModel(
+        userId: winnerId,
+        name: 'Player',
+        color: 'red',
+        isReady: true,
+        isConnected: true,
+        isBot: false,
+      ),
+    );
     final winnerName = winnerPlayer.name;
-    final isMe = winnerId == widget.myUser.id;
 
     showGeneralDialog(
       context: context,
@@ -1366,18 +1392,19 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: (isMe ? AppColors.secondary : AppColors.primary).withOpacity(0.3),
-                        blurRadius: 30,
-                        spreadRadius: 5,
+                        color: Colors.amber.withOpacity(0.35),
+                        blurRadius: 28,
+                        spreadRadius: 2,
                       ),
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 15,
-                        offset: const Offset(0, 10),
+                        color: Colors.black.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                     border: Border.all(
-                      color: (isMe ? AppColors.secondary : AppColors.primary).withOpacity(0.4),
+                      color: Colors.amber.withOpacity(0.4),
                       width: 2.0,
                     ),
                   ),
@@ -1417,18 +1444,29 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
                               ),
                               const SizedBox(height: 24),
                               
-                              // Premium typography Title
-                              Text(
-                                isMe ? '👑 VICTORY! 👑' : 'GAME COMPLETED',
+                              // Visual Announcement: 🏆 Winner / [WinnerPlayerName] Wins!
+                              const Text(
+                                '🏆 Winner',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 28,
-                                  color: isMe ? Colors.amber : Colors.white,
+                                  fontSize: 32,
+                                  color: Colors.amber,
                                   letterSpacing: 1.5,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
+                              Text(
+                                '$winnerName Wins!',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 22,
+                                  color: Colors.white,
+                                  letterSpacing: 1.0,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 20),
                               
                               // Winner details card
                               Container(
@@ -1453,49 +1491,65 @@ class _GameBoardScreenState extends State<GameBoardScreen> with TickerProviderSt
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 20),
-                              
-                              // Detail descriptions
-                              Text(
-                                isMe
-                                    ? 'Incredible strategy! You have conquered the Ludo Master arena and claimed the ultimate reward of +200 coins!'
-                                    : 'A great battle! $winnerName was victorious this time. Train hard and claim your win in the next arena!',
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 13,
-                                  height: 1.4,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
                               const SizedBox(height: 28),
                               
-                              // Sleek Action Button
-                              SizedBox(
-                                width: double.infinity,
-                                height: 50,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: isMe ? Colors.amber : AppColors.primary,
-                                    foregroundColor: Colors.black,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                    elevation: 5,
-                                    shadowColor: (isMe ? Colors.amber : AppColors.primary).withOpacity(0.4),
-                                  ),
-                                  child: Text(
-                                    'CONTINUE',
-                                    style: TextStyle(
-                                      color: isMe ? Colors.black : Colors.white,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 14,
-                                      letterSpacing: 1.0,
+                              // Action Buttons row
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SizedBox(
+                                      height: 50,
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.secondary,
+                                          foregroundColor: Colors.black,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          elevation: 5,
+                                        ),
+                                        onPressed: () {
+                                          AccessibilityService.instance.triggerHaptic(intensity: 'heavy');
+                                          Navigator.pop(context); // close dialog
+                                          Navigator.pop(context); // exit game board screen
+                                        },
+                                        child: const Text(
+                                          'Play Again',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 12,
+                                            letterSpacing: 1.0,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  onPressed: () {
-                                    AccessibilityService.instance.triggerHaptic(intensity: 'heavy');
-                                    Navigator.pop(context); // close dialog
-                                    Navigator.pop(context); // exit game board screen
-                                  },
-                                ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: SizedBox(
+                                      height: 50,
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Colors.white60, width: 1.5),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        ),
+                                        onPressed: () {
+                                          AccessibilityService.instance.triggerHaptic(intensity: 'medium');
+                                          Navigator.pop(context); // close dialog
+                                          Navigator.pop(context); // exit game board screen
+                                        },
+                                        child: const Text(
+                                          'Back To Home',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 12,
+                                            letterSpacing: 1.0,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

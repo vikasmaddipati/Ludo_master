@@ -525,15 +525,26 @@ class SocketService {
       }
 
       // Check winner
+      final tokensHomeCount = mockRoom!.tokens.where((t) => t.color == turnColor && t.position == 99).length;
+      final totalTokens = mockRoom!.tokens.where((t) => t.color == turnColor).length;
+      final colorNameCap = turnColor[0].toUpperCase() + turnColor.substring(1);
+      print('[WIN CHECK]');
+      print('$colorNameCap Tokens Home: $tokensHomeCount/$totalTokens\n');
+
       final allHome = mockRoom!.tokens.where((t) => t.color == turnColor).every((t) => t.position == 99);
       if (allHome) {
+        final winnerPlayer = mockRoom!.players.firstWhere((p) => p.color == turnColor);
+        print('[WINNER DETECTED]');
+        print('Winner: ${winnerPlayer.name}\n');
         mockRoom!.status = 'finished';
-        mockRoom!.winnerId = mockRoom!.players.firstWhere((p) => p.color == turnColor).userId;
+        mockRoom!.winnerId = winnerPlayer.userId;
       }
 
       if (_onTokenMoved != null) _onTokenMoved!(mockRoom!);
 
       if (mockRoom!.status == 'finished') {
+        print('[GAME ENDED]');
+        print('Match completed successfully\n');
         if (_onGameOver != null) _onGameOver!(mockRoom!.winnerId!);
         return;
       }

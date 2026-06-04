@@ -98,14 +98,14 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       ),
                       icon: Icon(widget.playerCount > 1 ? Icons.people : Icons.offline_bolt, color: Colors.white),
                       label: Text(
-                        widget.playerCount > 1 ? 'PLAY LOCAL PASS & PLAY' : 'PLAY OFFLINE VS BOTS',
+                        widget.playerCount > 1 ? 'PLAY LOCAL ARENA' : 'PLAY OFFLINE VS BOTS',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5),
                       ),
                       onPressed: () {
                         setState(() {
                           _socket.isMockMode = true;
                           _statusMessage = widget.playerCount > 1 
-                              ? 'Launching offline Pass & Play arena...' 
+                              ? 'Launching Local Arena...' 
                               : 'Launching offline sandbox...';
                         });
                         _connectSocket();
@@ -128,9 +128,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                          color: AppColors.primary.withOpacity(0.35),
+                          blurRadius: 16,
+                          spreadRadius: 1,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
@@ -175,6 +176,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
                             decoration: BoxDecoration(
                               color: AppColors.surface,
                               borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withOpacity(0.04), width: 1.0),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 14,
+                                  spreadRadius: 1,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
                             ),
                             child: Row(
                               children: [
@@ -371,6 +381,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     _socket.onRoomUpdated((updatedRoom) {
       if (mounted) {
+        if (_room == null) {
+          final isCreator = updatedRoom.creator == widget.hostUser.id;
+          if (isCreator) {
+            AccessibilityService.instance.speak("Room created successfully.", force: true);
+          } else {
+            AccessibilityService.instance.speak("Joined room successfully.", force: true);
+          }
+        } else {
+          final oldPlayers = _room?.players.length ?? 0;
+          final newPlayers = updatedRoom.players.length;
+          if (newPlayers > oldPlayers) {
+            final joinedPlayer = updatedRoom.players.last;
+            AccessibilityService.instance.speak("${joinedPlayer.name} joined the room successfully.", force: true);
+          }
+        }
         setState(() {
           _room = updatedRoom;
         });

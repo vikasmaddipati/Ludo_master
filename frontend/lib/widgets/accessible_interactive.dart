@@ -135,15 +135,14 @@ class AccessibleButton extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           gradient: isSecondary ? null : AppColors.primaryGradient,
-          boxShadow: isSecondary
-              ? []
-              : [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+          boxShadow: [
+            BoxShadow(
+              color: (isSecondary ? Colors.black : AppColors.primary).withOpacity(0.35),
+              blurRadius: 14,
+              spreadRadius: 1,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
         child: ElevatedButton(
           style: themeButton,

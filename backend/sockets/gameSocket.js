@@ -41,7 +41,7 @@ const clearTurnTimer = (roomCode) => {
 
 const initSocket = (io) => {
   io.on('connection', (socket) => {
-    console.log(`Socket connected: ${socket.id}`);
+    console.log(`[SOCKET] Connected: ${socket.id}`);
 
     // Register active user
     socket.on('register_user', (userId) => {
@@ -66,8 +66,10 @@ const initSocket = (io) => {
     // Join Game Room
     socket.on('join_room', async ({ roomCode, userId, name }) => {
       try {
+        console.log(`[ROOM] Join Request: roomCode=${roomCode}, userId=${userId}`);
         let room = await GameRoom.findOne({ roomCode });
         if (!room) {
+          console.log(`[ROOM] Join Failed: Room not found for code ${roomCode}`);
           socket.emit('error_message', { message: 'Room not found.' });
           return;
         }
@@ -81,6 +83,7 @@ const initSocket = (io) => {
 
         if (playerIndex !== -1) {
           room.players[playerIndex].isConnected = true;
+          console.log(`[SOCKET] Reconnected: user=${name} in room=${roomCode}`);
         } else if (room.status === 'waiting' && room.players.length < 4) {
           // Assign color
           const colorsUsed = room.players.map(p => p.color);
@@ -98,14 +101,16 @@ const initSocket = (io) => {
           const activePlayer = room.players.find(p => p.userId === userId);
           if (activePlayer) {
             activePlayer.isConnected = true;
-            console.log(`User ${name} reconnected to active room ${roomCode}`);
+            console.log(`[SOCKET] Reconnected: user=${name} in room=${roomCode}`);
           } else {
+            console.log(`[ROOM] Join Failed: Game already started in ${roomCode}`);
             socket.emit('error_message', { message: 'Game has already started, cannot join.' });
             return;
           }
         }
 
         await room.save();
+        console.log(`[ROOM] Join Success: user=${name} joined room=${roomCode}`);
         io.to(roomCode).emit('room_updated', room);
       } catch (err) {
         console.error('Join room error:', err);
@@ -312,13 +317,20 @@ const initSocket = (io) => {
         }
 
         // Check if current player has won (all 4 tokens at 99)
+        const currentTurnColorCap = currentTurnColor.charAt(0).toUpperCase() + currentTurnColor.slice(1);
+        const homeTokensCount = room.tokens.filter(t => t.color === currentTurnColor && t.position === 99).length;
+        const totalTokensCount = room.tokens.filter(t => t.color === currentTurnColor).length;
+        console.log(`[WIN CHECK]\n${currentTurnColorCap} Tokens Home: ${homeTokensCount}/${totalTokensCount}\n`);
+
         const allTokensHome = room.tokens
           .filter(t => t.color === currentTurnColor)
           .every(t => t.position === 99);
 
         if (allTokensHome) {
+          const winnerPlayer = room.players.find(p => p.color === currentTurnColor);
+          console.log(`[WINNER DETECTED]\nWinner: ${winnerPlayer.name}\n`);
           room.status = 'finished';
-          room.winnerId = room.players.find(p => p.color === currentTurnColor).userId;
+          room.winnerId = winnerPlayer.userId;
 
           // Update database details, add rewards
           const winningUser = await User.findById(room.winnerId);
@@ -345,6 +357,7 @@ const initSocket = (io) => {
               }
             }
           }
+          console.log(`[GAME ENDED]\nMatch completed successfully\n`);
         }
 
         await room.save();
@@ -463,6 +476,7 @@ const initSocket = (io) => {
 
     // Handle Network Disconnections
     socket.on('disconnect', async () => {
+      console.log(`[SOCKET] Disconnected: socketId=${socket.id}, userId=${socket.userId || 'guest'}`);
       if (socket.userId && activeUserSockets.get(socket.userId) === socket.id) {
         activeUserSockets.delete(socket.userId);
         console.log(`User ${socket.userId} removed from active user sockets.`);
@@ -563,10 +577,18 @@ const triggerBotAction = (io, roomCode) => {
         }
 
         // Win check
+        const botColorCap = updatedRoom.turn.charAt(0).toUpperCase() + updatedRoom.turn.slice(1);
+        const botHomeTokensCount = updatedRoom.tokens.filter(t => t.color === updatedRoom.turn && t.position === 99).length;
+        const botTotalTokensCount = updatedRoom.tokens.filter(t => t.color === updatedRoom.turn).length;
+        console.log(`[WIN CHECK]\n${botColorCap} Tokens Home: ${botHomeTokensCount}/${botTotalTokensCount}\n`);
+
         const won = updatedRoom.tokens.filter(t => t.color === updatedRoom.turn).every(t => t.position === 99);
         if (won) {
+          const winnerPlayer = updatedRoom.players.find(p => p.color === updatedRoom.turn);
+          console.log(`[WINNER DETECTED]\nWinner: ${winnerPlayer.name}\n`);
           updatedRoom.status = 'finished';
-          updatedRoom.winnerId = updatedRoom.players.find(p => p.color === updatedRoom.turn).userId;
+          updatedRoom.winnerId = winnerPlayer.userId;
+          console.log(`[GAME ENDED]\nMatch completed successfully\n`);
         }
 
         await updatedRoom.save();

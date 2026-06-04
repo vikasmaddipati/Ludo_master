@@ -15,6 +15,7 @@ const createRoom = async (req, res) => {
     }
 
     const roomCode = generateRoomCode();
+    console.log(`[ROOM] Room Code Generated: ${roomCode}`);
 
     const room = new GameRoom({
       roomCode,
@@ -33,6 +34,7 @@ const createRoom = async (req, res) => {
     });
 
     await room.save();
+    console.log(`[ROOM] Room Created: ${roomCode}`);
 
     res.status(201).json({
       success: true,
